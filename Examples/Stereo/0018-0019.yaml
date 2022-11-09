@@ -1,0 +1,98 @@
+%YAML:1.0
+
+#--------------------------------------------------------------------------------------------
+# Camera Parameters.
+#--------------------------------------------------------------------------------------------
+
+# Camera calibration and distortion parameters (OpenCV)
+Camera.fx: 718.3351
+Camera.fy: 718.3351
+Camera.cx: 600.3891
+Camera.cy: 181.5122
+
+Camera.k1: 0.0
+Camera.k2: 0.0
+Camera.p1: 0.0
+Camera.p2: 0.0
+Camera.k3: 0.0
+
+Camera.width: 1242
+Camera.height: 375
+
+# Camera frames per second
+Camera.fps: 10.0
+
+# IR projector baseline times fx (aprox.)
+Camera.bf: 380.81852 #336.3147 + 44.50382
+
+# Color order of the images (0: BGR, 1: RGB. It is ignored if images are grayscale)
+Camera.RGB: 1
+
+Camera.gray: 0
+
+# Close/Far threshold. Baseline times.
+ThDepth: 50
+
+#--------------------------------------------------------------------------------------------
+# ORB Parameters
+#--------------------------------------------------------------------------------------------
+
+# ORB Extractor: Number of features per image
+ORBextractor.nFeatures: 1000  #3000
+
+# ORB Extractor: Scale factor between levels in the scale pyramid
+ORBextractor.scaleFactor: 1.2
+
+# ORB Extractor: Number of levels in the scale pyramid
+ORBextractor.nLevels: 8
+
+# ORB Extractor: Fast threshold
+# Image is divided in a grid. At each cell FAST are extracted imposing a minimum response.
+# Firstly we impose iniThFAST. If no corners are detected we impose a lower value minThFAST
+# You can lower these values if your images have low contrast
+ORBextractor.iniThFAST: 20  # 20 18
+ORBextractor.minThFAST: 5   # 7  5
+
+#--------------------------------------------------------------------------------------------
+# Viewer Parameters
+#--------------------------------------------------------------------------------------------
+Viewer.UseViewer: 1
+Viewer.KeyFrameSize: 0.6
+Viewer.KeyFrameLineWidth: 2
+Viewer.GraphLineWidth: 1
+Viewer.PointSize: 2
+Viewer.CameraSize: 0.7
+Viewer.CameraLineWidth: 3
+Viewer.ViewpointX: 0
+Viewer.ViewpointY: -100
+Viewer.ViewpointZ: -0.1
+Viewer.ViewpointF: 2000
+
+
+# SLOT
+SLOT.MODE: 4
+DynaSLAM.MODE: 0
+Object.EnSelectTrackedObjId: 1
+Object.EbManualSetPointMaxDistance: 0 # 是否认为设定目标点到目标中心的距离，是则读下一个数，不是则直接用目标离线尺度
+Object.EfInObjFramePointMaxDistance: 3 
+Object.EbSetInitPositionByPoints: -1 # > 0 表示是, <=0表示用离线设置数据
+Object.EnInitDetObjORBFeaturesNum: 6
+Viewer.ObjectPointSize: 7.5
+Viewer.ObjectTrajectorySize: 12
+Viewer.ObjectCenter: 0 # 0 代表在几何中心, 1 代表在底面中心(只有virtual kitti提供的目标坐标系是在底部中心)
+
+
+Object.EnOnlineDetectionMode: 1 # 如果是离线模式，下面的都不需要
+Yolo.isGPU: 1 # >0代表true, <0 代表false
+Yolo.confThres: 0.4
+Yolo.iouThres: 0.5
+Yolo.weightsPath: /home/zpk/SLOT/ORB_SLAM2/weights/yolov5m6.torchscript
+DeepSort.weightsPath: /home/zpk/SLOT/ORB_SLAM2/weights/deepsort8.1.engine
+Object.Width.xc: 1.6
+Object.Height.yc: 1.5
+Object.Length.zc: 3
+
+
+
+
+
