@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 2.8)
-project(ORB_SLAM2)
+project(PointSLOT)
 
 IF(NOT CMAKE_BUILD_TYPE)
   SET(CMAKE_BUILD_TYPE Release)
@@ -10,7 +10,8 @@ MESSAGE("Build type: " ${CMAKE_BUILD_TYPE})
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS}  -Wall -w -O3 -march=native ")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -w  -O3 -march=native")
 
-# -O0不优化，实时性会下降的比较厉害，只用于debug
+#-O0 is not optimized, and its real-time performance will be severely degraded.
+# Only used for debugging
 #set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS}  -Wall  -O0")
 #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall   -O0")
 
@@ -78,8 +79,8 @@ find_package(CUDA REQUIRED)
 set(CUDA_NVCC_PLAGS ${CUDA_NVCC_PLAGS};-std=c++11;-g;-G;-gencode;arch=compute_53;code=sm_53)
 include_directories(/usr/local/cuda/include)
 link_directories(/usr/local/cuda/lib64)
-include_directories(/home/zpk/SLOT/ORB_SLAM2/TensorRT-8.4.0.6/include/)
-link_directories(/home/zpk/SLOT/ORB_SLAM2/TensorRT-8.4.0.6/lib/)
+include_directories(${PROJECT_SOURCE_DIR}/TensorRT-8.4.0.6/include/)
+link_directories(${PROJECT_SOURCE_DIR}/TensorRT-8.4.0.6/lib/)
 
 aux_source_directory(${PROJECT_SOURCE_DIR}/deepsort/src DEEPSORT_SRC_DIR)
 add_library(deepsort SHARED ${DEEPSORT_SRC_DIR})
@@ -161,11 +162,3 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/Examples/Stereo)
 add_executable(stereo_kitti
 Examples/Stereo/stereo_kitti.cc)
 target_link_libraries(stereo_kitti ${PROJECT_NAME})
-
-#add_executable(stereo_mynteye
-#        Examples/Stereo/stereo_mynteye.cpp)
-#target_link_libraries(stereo_mynteye ${PROJECT_NAME})
-#
-#add_executable(stereo_pointgrey
-#        Examples/Stereo/stereo_pointgrey.cpp)
-#target_link_libraries(stereo_pointgrey ${PROJECT_NAME})

@@ -1115,13 +1115,13 @@ cv::Mat Tracking::GrabImageStereo(const cv::Mat &imRectLeft, const cv::Mat &imRe
     auto t1 = std::chrono::steady_clock::now();
     switch (EnSLOTMode)
     {
-        case 0: // SLAM 模式
+        case 0: // SLAM mode
         {
             mCurrentFrame = Frame(mImGray,imGrayRight,timestamp,mpORBextractorLeft,mpORBextractorRight,mpORBVocabulary,mK,mDistCoef,mbf,mThDepth);
             break;
         }
 
-        case 1: // 动态SLAM模式
+        case 1: // Dynamic SLAM mode
         {
             if(EnDynaSLAMMode == 0)
             {
@@ -1136,21 +1136,21 @@ cv::Mat Tracking::GrabImageStereo(const cv::Mat &imRectLeft, const cv::Mat &imRe
             break;
         }
 
-        case 2: // 目标跟踪模式
+        case 2: // Object tracking mode
         {
             mCurrentFrame = Frame(mImGray,imGrayRight, imColor,timestamp,mpORBextractorLeft,mpORBextractorRight,mpORBVocabulary,mK,mDistCoef,mbf,mThDepth,
                                   mMultiTracker, mvTrackers);
             break;
         }
 
-        case 3: // 自动驾驶模式
+        case 3: // Autonomous Driving mode
         {
             mCurrentFrame = Frame(mImGray,imGrayRight, imColor,timestamp,mpORBextractorLeft,mpORBextractorRight,mpORBVocabulary,mK,mDistCoef,mbf,mThDepth,
                                   mYOLODetector, mDeepSort);
             break;
         }
 
-        case 4: // 终极算法性能测试模式
+        case 4: // Test mode
         {
             mCurrentFrame = Frame(mImGray,imGrayRight, imColor,timestamp,mpORBextractorLeft,mpORBextractorRight,mpORBVocabulary,mK,mDistCoef,mbf,mThDepth,
                     EnSLOTMode);
@@ -1169,87 +1169,76 @@ cv::Mat Tracking::GrabImageStereo(const cv::Mat &imRectLeft, const cv::Mat &imRe
 }
 
 
-/// Tracking线程最主要的函数: Track()
+
 void Tracking::Track()
 {
     // mState为tracking的状态机
     // SYSTME_NOT_READY, NO_IMAGE_YET, NOT_INITIALIZED, OK, LOST
-    /// 1. 如果图像复位过、或者第一次运行，则为NO_IMAGE_YET状态
+
     if(mState==NO_IMAGES_YET)
     {
         mState = NOT_INITIALIZED;
     }
 
-    /// 2. 给 mLastProcessedState 赋当前的mState值
-    /// mLastProcessedState存储了Tracking最新的状态，用于FrameDrawer中的绘制
+
     mLastProcessedState=mState;
 
-    /// 3. 求一个地图锁, 此时地图不能被修改
+
     // Get Map Mutex -> Map cannot be changed
     unique_lock<mutex> lock(mpMap->mMutexMapUpdate);
 
-    /// 4. 如果当前状态未被初始化: 则进行初始化
+
     if(mState==NOT_INITIALIZED)
     {
         StereoInitialization();
-        /// TODO 4.2 ????
+
         mpFrameDrawer->Update(this);
         mpMapDrawer->UpdateCurrentMap(this);
 
-        /// 4.3 判断当前状态, 如果不OK, 直接返回
+
         if(mState!=OK)
             return;
     }
     else
     {
-        /// 5. 如果已经被初始化过: 则直接进行跟踪
+
         bool bOK;
 
-        /// 一、camera跟踪
-        /// 6.1 正常初始化成功
+
         auto t1 = std::chrono::steady_clock::now();
         if(mState==OK)
         {
-            /// 继承上一帧的静态物体属性，归还特征点
+
             InheritObjFromLastFrame();
-            // Local Mapping might have changed some MapPoints tracked in last frame
-            /// 6.1.1 检查并更新上一帧被替换的MapPoints, 更新Fuse函数和SearchAndFuse函数替换的MapPoints
+
             CheckReplacedInLastFrame();
 
-            /// 跟踪上一帧或者参考帧或者重定位
-            /// 6.1.2 运动模型为空或刚完成重定位
+
             if(mVelocity.empty() || mCurrentFrame.mnId<mnLastRelocFrameId+2)
             {
-                /// 6.1.2.1  将上一帧的位姿作为当前帧的初始位姿, 通过BoW的方式在参考帧中找当前帧特征点的匹配点, 优化每个特征点都对应3D点重投影误差即可得到位姿
+
                 bOK = TrackReferenceKeyFrame();
             }
             else
             {
-                /// 6.1.2.2 根据恒速模型设定当前帧的初始位姿, 通过投影的方式在参考帧中找当前帧特征点的匹配点, 优化每个特征点所对应3D点的投影误差即可得到位姿
                 bOK = TrackWithMotionModel();
-                /// 6.1.2.3 跟踪匀速模型失败, 再转为跟踪参考帧
+
                 if(!bOK)
                     bOK = TrackReferenceKeyFrame();
             }
         }
-        else /// 6.1 初始化失败
+        else
         {
-            /// 6.1.1 进行重定位: BOW搜索, PnP求解位姿(如果跟踪局部地图失败, 会再下一帧进行重定位)
+
             bOK = Relocalization();
         }
-        /// 7. 将最新的关键帧作为reference frame
+
         mCurrentFrame.mpReferenceKF = mpReferenceKF;
-        /// 8. 在帧间匹配得到初始的姿态后，现在对local map进行跟踪得到更多的匹配，并优化当前位姿
-        /// local map:当前帧、当前帧的MapPoints、当前关键帧与其它关键帧共视关系,
-        /// 在步骤6.1中主要是两两跟踪（恒速模型跟踪上一帧、跟踪参考帧），
-        /// 这里搜索局部关键帧后搜集所有局部MapPoints，
-        /// 然后将局部MapPoints和当前帧进行投影匹配，得到更多匹配的MapPoints后进行Pose优化
-        if(bOK) /// 需要步骤6.1 返回状态为OK
-            /// 8.1 跟踪局部地图,还是3D 静态 mappoints
+
+        if(bOK)
+
             bOK = TrackLocalMap();
         auto t2 = std::chrono::steady_clock::now();
-        /// 二、动态目标跟踪
-        /// 9. 对动态目标, 目标ORB特征点进行跟踪, 并对二者进行优化
 
         switch(EnSLOTMode)
         {
@@ -1258,49 +1247,47 @@ void Tracking::Track()
                 break;
             }
 
-            case 1: // 语义动态SLAM模式
+            case 1: // Semantic Dynamic SLAM
             {
                 break;
             }
 
-            case 2: // 目标跟踪模式
+            case 2: // Object Tracking
             {
 
                 if (mCurrentFrame.mnDetObj != 0)
                 {
-                    /// 9.2 2D objects 建立3D objects (MapObject)
-                    TrackMapObject(); // 应该还多一个参数,用来跟踪局部地图的
-                    if (mCurrentFrame.mvInLastFrameTrackedObjOrders.size() != 0) // 跟踪上一帧
+                    /// 9.2 Construct 3D objects (MapObject) from 2D instance detection
+                    TrackMapObject();
+                    if (mCurrentFrame.mvInLastFrameTrackedObjOrders.size() != 0)
                     {
-                        CheckReplacedMapObjectPointsInLastFrame();// 检查上一帧的地图点是否被替换
+                        CheckReplacedMapObjectPointsInLastFrame();
                         TrackLastFrameObjectPoint(false);
                     }
-                    //  跟踪参考关键帧(若目标跟踪上一帧失败): 为上一次的关键帧 或 是上一次的最佳共视关键帧
+
                     if (mCurrentFrame.mvTotalTrackedObjOrders.size() != 0)
                     {
-                        TrackObjectLocalMap();// 跟踪局部地图, 只针对于, 目标标志为true的目标
+                        TrackObjectLocalMap();
                     }
                 }
                 break;
             }
 
-            case 3: // 自动驾驶模式
+            case 3:
             {
-                /// 9.1 判断当前帧是否检测到动态object, 没有检测到则直接跳过
+
                 if (mCurrentFrame.mnDetObj != 0)
                 {
-                    /// 9.2 2D objects 建立3D objects (MapObject)
-                    TrackMapObject(); // 应该还多一个参数,用来跟踪局部地图的
-                    if(mCurrentFrame.mvInLastFrameTrackedObjOrders.size()!=0) // 跟踪上一帧
+                    TrackMapObject();
+                    if(mCurrentFrame.mvInLastFrameTrackedObjOrders.size()!=0)
                     {
-                        CheckReplacedMapObjectPointsInLastFrame();// 检查上一帧的地图点是否被替换
+                        CheckReplacedMapObjectPointsInLastFrame();
                         TrackLastFrameObjectPoint(false);
                     }
-                    //  跟踪参考关键帧(若目标跟踪上一帧失败): 为上一次的关键帧 或 是上一次的最佳共视关键帧
 
                     if(mCurrentFrame.mvTotalTrackedObjOrders.size()!=0)
                     {
-                        TrackObjectLocalMap();// 跟踪局部地图, 只针对于, 目标标志为true的目标
+                        TrackObjectLocalMap();
                     }
                 }
 
@@ -1309,18 +1296,17 @@ void Tracking::Track()
 
             case 4: // 终极测试模式
             {
-                /// 9.2 2D objects 建立3D objects (MapObject)
-                TrackMapObject(); // 应该还多一个参数,用来跟踪局部地图的
-                if (mCurrentFrame.mvInLastFrameTrackedObjOrders.size() != 0) // 跟踪上一帧
+
+                TrackMapObject();
+                if (mCurrentFrame.mvInLastFrameTrackedObjOrders.size() != 0)
                 {
-                    CheckReplacedMapObjectPointsInLastFrame();// 检查上一帧的地图点是否被替换
+                    CheckReplacedMapObjectPointsInLastFrame();
                     TrackLastFrameObjectPoint(false);
                 }
-                //  跟踪参考关键帧(若目标跟踪上一帧失败): 为上一次的关键帧 或 是上一次的最佳共视关键帧
 
                 if (mCurrentFrame.mvTotalTrackedObjOrders.size() != 0)
                 {
-                    TrackObjectLocalMap();// 跟踪局部地图, 只针对于, 目标标志为true的目标
+                    TrackObjectLocalMap();
                 }
                 break;
             }
@@ -1330,30 +1316,29 @@ void Tracking::Track()
         }
         auto t3 = std::chrono::steady_clock::now();
 
-        // FIXME 动静态区分
+        // Moving Objects Recognition
         DynamicStaticDiscrimination();
         auto t4 = std::chrono::steady_clock::now();
 
 
 
-        if(bOK)// 如果跟踪静态局部地图效果好, 则将系统状态置为OK, 否则置为LOST
+        if(bOK)
             mState = OK;
         else
         {
-            cout<<RED<<"相机跟踪丢失, 下一帧将进行重定位!"; // 可能会一直进行重定位
+            cout<<RED<<"Tracking is Lost!";
             mState = LOST;
         }
 
-        //cout<<"当前mvDetectionObjects: "<<mCurrentFrame.mvDetectionObjects.size()<<", 当前mvObjKeys: "<<mCurrentFrame.mvObjKeys.size()<<", mnDetObj: "<<mCurrentFrame.mnDetObj<<endl;
+        //cout<<"Current mvDetectionObjects: "<<mCurrentFrame.mvDetectionObjects.size()<<", Current mvObjKeys: "<<mCurrentFrame.mvObjKeys.size()<<", mnDetObj: "<<mCurrentFrame.mnDetObj<<endl;
         mpFrameDrawer->Update(this);
         mpMapDrawer->UpdateCurrentMap(this);
 
 
-        if(bOK)// 如果跟踪局部静态地图效果好, 则判断是否需要插入关键帧
+        if(bOK)
         {
-            if(!mLastFrame.mTcw.empty())// 如果上一阵的位姿不为空, 则更新匀速运动模型
+            if(!mLastFrame.mTcw.empty())
             {
-                //计算 mVelocity = c{当前帧}^T_w * w^T_c{上一帧} (为什么不直接求上一帧的逆, 搞这么麻烦)
                 cv::Mat LastTwc = cv::Mat::eye(4,4,CV_32F);
                 mLastFrame.GetRotationInverse().copyTo(LastTwc.rowRange(0,3).colRange(0,3));
                 mLastFrame.GetCameraCenter().copyTo(LastTwc.rowRange(0,3).col(3));
@@ -1362,14 +1347,14 @@ void Tracking::Track()
             else
                 mVelocity = cv::Mat();
 
-            mpMapDrawer->SetCurrentCameraPoseAndId(mCurrentFrame.mTcw, mCurrentFrame.mnId);// 给mpMapDrawer类设置当前帧的位姿
+            mpMapDrawer->SetCurrentCameraPoseAndId(mCurrentFrame.mTcw, mCurrentFrame.mnId);
 
-            for(int i=0; i<mCurrentFrame.N; i++)// 清除UpdateLastFrame中为当前帧临时添加的MapPoints: 从当前帧中删除
+            for(int i=0; i<mCurrentFrame.N; i++)
             {
                 MapPoint* pMP = mCurrentFrame.mvpMapPoints[i];
                 if(pMP)
                 {
-                    if (pMP->Observations() < 1)// 如果这个landmakrk的观测次数为0, 则去除
+                    if (pMP->Observations() < 1)
                     {
                         mCurrentFrame.mvbOutlier[i] = false;
                         mCurrentFrame.mvpMapPoints[i] = static_cast<MapPoint *>(NULL);
@@ -1384,19 +1369,19 @@ void Tracking::Track()
             }
             mlpTemporalPoints.clear();
 
-            if(NeedNewKeyFrame())//创建新的相机关键帧
+            if(NeedNewKeyFrame())
             {
                 CreateNewKeyFrame();
             }
 
-            for(int i=0; i<mCurrentFrame.N;i++)// 删除当前帧中那些在LocalBA中检测为outlier的3D静态点
+            for(int i=0; i<mCurrentFrame.N;i++)
             {
-                if(mCurrentFrame.mvpMapPoints[i] && mCurrentFrame.mvbOutlier[i])// 遍历当前帧所有的特征点对应的landmark, 若它的outlier标志位为真, 则删去此landmark
+                if(mCurrentFrame.mvpMapPoints[i] && mCurrentFrame.mvbOutlier[i])
                     mCurrentFrame.mvpMapPoints[i]=static_cast<MapPoint*>(NULL);
             }
 
         }
-        if(mState==LOST)// 如果系统状态是LOST, 则重新Reset
+        if(mState==LOST)
         {
             if(mpMap->KeyFramesInMap()<=5)
             {
@@ -1405,11 +1390,11 @@ void Tracking::Track()
                 return;
             }
         }
-        if(!mCurrentFrame.mpReferenceKF)//  如果当前帧没有参考帧, 则设置当前帧的参考帧 TODO 前面到底设置过没有?
+        if(!mCurrentFrame.mpReferenceKF)
             mCurrentFrame.mpReferenceKF = mpReferenceKF;
 
 
-        // 模式后处理
+        // Post-Processing
         switch(EnSLOTMode)
         {
             case 0: // SLAM
@@ -1417,23 +1402,22 @@ void Tracking::Track()
                 break;
             }
 
-            case 1: // 语义动态SLAM模式
+            case 1: // Semantic Dynamic SLAM
             {
                 break;
             }
 
-            case 2: // 目标跟踪模式
+            case 2: // Object Tracking
             {
-                for(size_t i=0; i<mCurrentFrame.mnDetObj; i++) // 更新速度, 决定是否插入关键帧, 清除临时点等
+                for(size_t i=0; i<mCurrentFrame.mnDetObj; i++)
                 {
                     DetectionObject* pDet = mCurrentFrame.mvDetectionObjects[i];
                     MapObject* pMO = mCurrentFrame.mvMapObjects[i];
                     if(pDet==NULL||pMO==NULL)
                         assert(0);
-                    if(pMO->mnFirstObservationFrameId == mCurrentFrame.mnId) // 如果该目标是当前帧建立就跳过
+                    if(pMO->mnFirstObservationFrameId == mCurrentFrame.mnId)
                         continue;
 
-                    // 2. 剔除临时点, 注意只是剔除了当前帧, 并没有剔除上一帧, 若后面要用到上一帧则会有问题
                     for(size_t j=0; j<mCurrentFrame.mvpMapObjectPoints[i].size(); j++)
                     {
                         MapObjectPoint* pMP = mCurrentFrame.mvpMapObjectPoints[i][j];
@@ -1453,22 +1437,22 @@ void Tracking::Track()
                     }
                     pMO->mlpTemporalPoints.clear();
 
-                    if(pDet->mbTrackOK == true)// 跟踪成功
+                    if(pDet->mbTrackOK == true)
                     {
-                        pMO->UpdateVelocity(mCurrentFrame.mnId);// 1. 更新速度
-                        if(NeedNewObjectKeyFrame(i)) // 决定是否需要创建关键帧, 建立目标关键帧, 一帧一帧的建, 一帧帧的插入进去
+                        pMO->UpdateVelocity(mCurrentFrame.mnId);
+                        if(NeedNewObjectKeyFrame(i))
                         {
                             CreateNewObjectKeyFrame(i);
                         }
                     }
-                    else{ // 跟踪失败, 需要怎么处理它们, 来一个重定位 ?, 那重定位也失败了怎么办
-                        cout<<RED<<"目标"<<pDet->mnObjectID<<"跟踪3D点数太少, 跟踪失败!"<<WHITE<<endl;
+                    else{
+                        cout<<RED<<"Object "<<pDet->mnObjectID<<" tracking fails!"<<WHITE<<endl;
                         MapObjectReInit(i);
                     }
                 }
-                for(size_t n=0; n<mCurrentFrame.mnDetObj; n++)// 保存目标的相对位姿
+                for(size_t n=0; n<mCurrentFrame.mnDetObj; n++)
                 {
-                    MapObject* pMO = mCurrentFrame.mvMapObjects[n]; // 目标相对位姿 = 当前时刻pose * 当前时刻的参考关键帧时刻的pose的逆
+                    MapObject* pMO = mCurrentFrame.mvMapObjects[n];
                     if(pMO==NULL || pMO->mpReferenceObjKF == NULL)
                         continue;
                     g2o::SE3Quat x = pMO->GetCFInFrameObjState(mCurrentFrame.mnId).pose * pMO->GetCFObjectKeyFrameObjState(pMO->mpReferenceObjKF).pose.inverse();
@@ -1479,16 +1463,15 @@ void Tracking::Track()
 
             case 3: // 自动驾驶模式
             {
-                for(size_t i=0; i<mCurrentFrame.mnDetObj; i++) // 更新速度, 决定是否插入关键帧, 清除临时点等
+                for(size_t i=0; i<mCurrentFrame.mnDetObj; i++)
                 {
                     DetectionObject* pDet = mCurrentFrame.mvDetectionObjects[i];
                     MapObject* pMO = mCurrentFrame.mvMapObjects[i];
                     if(pDet==NULL||pMO==NULL)
-                        continue;
-                    if(pMO->mnFirstObservationFrameId == mCurrentFrame.mnId) // 如果该目标是当前帧建立就跳过
+                        assert(0);
+                    if(pMO->mnFirstObservationFrameId == mCurrentFrame.mnId)
                         continue;
 
-                    // 2. 剔除临时点, 注意只是剔除了当前帧, 并没有剔除上一帧, 若后面要用到上一帧则会有问题
                     for(size_t j=0; j<mCurrentFrame.mvpMapObjectPoints[i].size(); j++)
                     {
                         MapObjectPoint* pMP = mCurrentFrame.mvpMapObjectPoints[i][j];
@@ -1508,28 +1491,22 @@ void Tracking::Track()
                     }
                     pMO->mlpTemporalPoints.clear();
 
-                    if(pDet->mbTrackOK == true)// 跟踪成功
+                    if(pDet->mbTrackOK == true)
                     {
-                        cv::Mat camera_Tcl = cv::Mat::eye(4, 4, CV_32F);
-                        if (!mCurrentFrame.mTcw.empty()){
-                            camera_Tcl = mCurrentFrame.mTcw.clone() * mLastFrame.mTwc.clone();
-                        }
-                        pMO->UpdateCFVelocity(mCurrentFrame.mnId, camera_Tcl);// 1. 更新速度
-                        if(NeedNewObjectKeyFrame(i)) // 决定是否需要创建关键帧, 建立目标关键帧, 一帧一帧的建, 一帧帧的插入进去
+                        pMO->UpdateVelocity(mCurrentFrame.mnId);
+                        if(NeedNewObjectKeyFrame(i))
                         {
                             CreateNewObjectKeyFrame(i);
                         }
                     }
                     else{
-                        // 跟踪失败, 需要怎么处理它们, 来一个重定位 ?, 那重定位也失败了怎么办
-                        // 优化匹配的点太少，主要是由于遮挡引起的，狗着就行，不用reinit
-                        //cout<<RED<<"目标"<<pDet->mnObjectID<<"跟踪3D点数太少, 跟踪失败!"<<WHITE<<endl;
+                        cout<<RED<<"Object "<<pDet->mnObjectID<<" tracking fails!"<<WHITE<<endl;
                         MapObjectReInit(i);
                     }
                 }
-                for(size_t n=0; n<mCurrentFrame.mnDetObj; n++)// 保存目标的相对位姿
+                for(size_t n=0; n<mCurrentFrame.mnDetObj; n++)
                 {
-                    MapObject* pMO = mCurrentFrame.mvMapObjects[n]; // 目标相对位姿 = 当前时刻pose * 当前时刻的参考关键帧时刻的pose的逆
+                    MapObject* pMO = mCurrentFrame.mvMapObjects[n];
                     if(pMO==NULL || pMO->mpReferenceObjKF == NULL)
                         continue;
                     g2o::SE3Quat x = pMO->GetCFInFrameObjState(mCurrentFrame.mnId).pose * pMO->GetCFObjectKeyFrameObjState(pMO->mpReferenceObjKF).pose.inverse();
@@ -1540,20 +1517,19 @@ void Tracking::Track()
 
             case 4:
             {
-                for(size_t i=0; i<mCurrentFrame.mnDetObj; i++) // 更新速度, 决定是否插入关键帧, 清除临时点等
+                for(size_t i=0; i<mCurrentFrame.mnDetObj; i++)
                 {
                     DetectionObject* pDet = mCurrentFrame.mvDetectionObjects[i];
                     MapObject* pMO = mCurrentFrame.mvMapObjects[i];
                     if(pDet==NULL||pMO==NULL)
-                        continue;
-                    if(pMO->mnFirstObservationFrameId == mCurrentFrame.mnId) // 如果该目标是当前帧建立就跳过
+                        assert(0);
+                    if(pMO->mnFirstObservationFrameId == mCurrentFrame.mnId)
                         continue;
 
-                    // 2. 剔除临时点, 注意只是剔除了当前帧, 并没有剔除上一帧, 若后面要用到上一帧则会有问题
                     for(size_t j=0; j<mCurrentFrame.mvpMapObjectPoints[i].size(); j++)
                     {
                         MapObjectPoint* pMP = mCurrentFrame.mvpMapObjectPoints[i][j];
-                        if(!pMP)
+                        if(pMP==NULL)
                             continue;
                         if(pMP->Observations()<1)
                         {
@@ -1568,30 +1544,23 @@ void Tracking::Track()
                         pMP = NULL;
                     }
                     pMO->mlpTemporalPoints.clear();
-                    cout<<"Object ID: "<<pMO->mnTruthID<<", "<<mCurrentFrame.mvObjKeys[i].size()<<", mbTrack State: "<<pDet->mbTrackOK<<endl;
-                    if(pDet->mbTrackOK == true)// 跟踪成功
-                        //FIXME 跟踪失败的物体临时点没有剔除，BUG找到!!
-                    {
-                        cv::Mat camera_Tcl = cv::Mat::eye(4, 4, CV_32F);
-                        if (!mCurrentFrame.mTcw.empty()){
-                            camera_Tcl = mCurrentFrame.mTcw.clone() * mLastFrame.mTwc.clone();
-                        }
-                        pMO->UpdateVelocity(mCurrentFrame.mnId);// 1. 更新速度
 
-                        if(NeedNewObjectKeyFrame(i)) // 决定是否需要创建关键帧, 建立目标关键帧, 一帧一帧的建, 一帧帧的插入进去
+                    if(pDet->mbTrackOK == true)
+                    {
+                        pMO->UpdateVelocity(mCurrentFrame.mnId);
+                        if(NeedNewObjectKeyFrame(i))
                         {
                             CreateNewObjectKeyFrame(i);
                         }
                     }
-                    else{ // 跟踪失败, 需要怎么处理它们, 来一个重定位 ?, 那重定位也失败了怎么办
-                        // 优化匹配的点太少，主要是由于遮挡引起的，狗着就行，不用reinit
-                        //cout<<RED<<"目标"<<pDet->mnObjectID<<"跟踪3D点数太少, 跟踪失败!"<<WHITE<<endl;
+                    else{
+                        cout<<RED<<"Object "<<pDet->mnObjectID<<" tracking fails!"<<WHITE<<endl;
                         MapObjectReInit(i);
                     }
                 }
-                for(size_t n=0; n<mCurrentFrame.mnDetObj; n++)// 保存目标的相对位姿
+                for(size_t n=0; n<mCurrentFrame.mnDetObj; n++)
                 {
-                    MapObject* pMO = mCurrentFrame.mvMapObjects[n]; // 目标相对位姿 = 当前时刻pose * 当前时刻的参考关键帧时刻的pose的逆
+                    MapObject* pMO = mCurrentFrame.mvMapObjects[n];
                     if(pMO==NULL || pMO->mpReferenceObjKF == NULL)
                         continue;
                     g2o::SE3Quat x = pMO->GetCFInFrameObjState(mCurrentFrame.mnId).pose * pMO->GetCFObjectKeyFrameObjState(pMO->mpReferenceObjKF).pose.inverse();
@@ -1609,23 +1578,23 @@ void Tracking::Track()
 //        <<", postprocessing:"<<std::chrono::duration_cast<std::chrono::duration<double> >(t5 - t4).count()<<endl;
     }
 
-    if(!mCurrentFrame.mTcw.empty())// 记录相机位姿信息, 用于轨迹复现
+    if(!mCurrentFrame.mTcw.empty())
     {
-        cv::Mat Tcr = mCurrentFrame.mTcw*mCurrentFrame.mpReferenceKF->GetPoseInverse(); // 计算cTw * wTr = cTr
-        mlRelativeFramePoses.push_back(Tcr);// 存储cTr
-        mlpReferences.push_back(mpReferenceKF);// 存储参考帧
-        mlFrameTimes.push_back(mCurrentFrame.mTimeStamp); // 存储当前帧的时间戳
-        mlbLost.push_back(mState==LOST);// 记录当前帧的状态是不是LOST
+        cv::Mat Tcr = mCurrentFrame.mTcw*mCurrentFrame.mpReferenceKF->GetPoseInverse();
+        mlRelativeFramePoses.push_back(Tcr);
+        mlpReferences.push_back(mpReferenceKF);
+        mlFrameTimes.push_back(mCurrentFrame.mTimeStamp);
+        mlbLost.push_back(mState==LOST);
     }
-    else// 如果当前帧的位姿为空, 则说明跟踪失败, 则相对位姿用上一次值
+    else
     {
-        mlRelativeFramePoses.push_back(mlRelativeFramePoses.back());// 将最近的相对位姿值存入mlRelativeFramePoses
-        mlpReferences.push_back(mlpReferences.back());// 将最近的参考帧放入mlpReferences
-        mlFrameTimes.push_back(mlFrameTimes.back());// 将最近的时间戳放入mlFrameTimes
-        mlbLost.push_back(mState==LOST);// 将状态lost放入mlbLost
+        mlRelativeFramePoses.push_back(mlRelativeFramePoses.back());
+        mlpReferences.push_back(mlpReferences.back());
+        mlFrameTimes.push_back(mlFrameTimes.back());
+        mlbLost.push_back(mState==LOST);
     }
 
-    if(mState!=NOT_INITIALIZED)  // 如果已经被初始化了, 则直接用当前帧mCurrentFrame构建上一帧
+    if(mState!=NOT_INITIALIZED)
     {
         mLastFrame = Frame(mCurrentFrame);
     }

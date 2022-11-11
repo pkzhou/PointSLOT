@@ -103,10 +103,10 @@ System::System(const string &strVocFile, const string &strSettingsFile, const eS
 
     //Initialize the Local Mapping thread and launch
     mpLocalMapper = new LocalMapping(mpMap, mSensor==MONOCULAR);
-    mptLocalMapping = new thread(&ORB_SLAM2::LocalMapping::Run,mpLocalMapper); // 传递mpLocalMapper地址的类的成员函数, 类指针
+    mptLocalMapping = new thread(&ORB_SLAM2::LocalMapping::Run,mpLocalMapper);
 
-    // object localmapping 线程
-    if(EnSLOTMode == 2 || EnSLOTMode == 3 ||EnSLOTMode == 4) // 什么样的情况下才开目标局部建图的线程
+    // object localmapping thread
+    if(EnSLOTMode == 2 || EnSLOTMode == 3 ||EnSLOTMode == 4)
     {
         mpObjectLocalMapping = new ObjectLocalMapping();
         mptObjectLocalMapping= new thread(&ObjectLocalMapping::Run, mpObjectLocalMapping);

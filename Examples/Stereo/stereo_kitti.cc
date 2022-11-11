@@ -38,14 +38,13 @@ void LoadImages(const string &strPathToSequence, vector<string> &vstrImageLeft,
 int getFileNum(const std::string &path);
 
 
-// 注意输入第一个参数是词包，第二个是相机参数，第三个是数据集的baseforlder
 int main(int argc, char **argv) {
     if (argc < 6) {
-        cerr << endl << " 需要输入参数: 词包路径, yaml文件路径, 数据集路径, 数据集名称, 两帧图像间隔时间!!!"  << endl;
+        cerr << endl << " You need to input parameters: word package path, yaml file path, dataset path, dataset name, interval time between two images!!!"  << endl;
         return 1;
     }
 
-    // 读取数据类型
+    // Reading Datasets type
 
     if(string(argv[4]).compare(std::string("Kitti_Tracking")) == 0)
     {
@@ -60,7 +59,7 @@ int main(int argc, char **argv) {
         ORB_SLAM2::EnDataSetNameNum = 2;
     }
 
-    ORB_SLAM2::EnImgTotalNum = getFileNum(string(argv[3])+"/image_02"); // 第5个参数是总图像数目
+    ORB_SLAM2::EnImgTotalNum = getFileNum(string(argv[3])+"/image_02");
     ORB_SLAM2::EdT = atof(argv[5]);
 
 
@@ -181,13 +180,13 @@ void LoadImages(const string &strPathToSequence, vector<string> &vstrImageLeft,
     fTimes.open(strPathTimeFile.c_str());
     if(fTimes.is_open())
     {
-        while(!fTimes.eof()) // 到达文件尾
+        while(!fTimes.eof())
         {
             string s;
             getline(fTimes,s);
             if(!s.empty())
             {
-                stringstream ss; // 输入输出操作, 用来进行数据类型转换
+                stringstream ss;
                 ss << s;
                 double t;
                 ss >> t;
@@ -196,15 +195,14 @@ void LoadImages(const string &strPathToSequence, vector<string> &vstrImageLeft,
         }
     }
     else{
-
-        // 如果 没有这个文件, 就自己写
+        // if there is no timestamp text
         double t = 0;
         for(size_t i = 0; i<ORB_SLAM2::EnImgTotalNum ; i++)
         {
             vTimestamps.push_back(t);
             t += ORB_SLAM2::EdT;
         }
-        cout<<"没有时间戳文件,图像总数为: "<<ORB_SLAM2::EnImgTotalNum<<" 图像周期为: "<<ORB_SLAM2::EdT<<" s"<<endl;
+        cout<<"No timestamp, the number of images is: "<<ORB_SLAM2::EnImgTotalNum<<" image interval: "<<ORB_SLAM2::EdT<<" s"<<endl;
     }
 
 

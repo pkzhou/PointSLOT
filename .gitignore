@@ -35,8 +35,8 @@ libtorch/lib/
 libtorch/share/
 libtorch/build-hash
 libtorch/build-version
-lib/libORB_SLAM2.so
-
+lib/*.so
+token
 TensorRT-8.4.0.6/bin/
 TensorRT-8.4.0.6/data/
 TensorRT-8.4.0.6/doc/

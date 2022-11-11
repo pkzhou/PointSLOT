@@ -140,7 +140,7 @@ cv::Mat Demo(cv::Mat& img,
 
     return img;
 }
-// 双目SLAM模式
+// Stereo SLAM
 Frame::Frame(const cv::Mat &imLeft, const cv::Mat &imRight, const double &timeStamp, ORBextractor* extractorLeft, ORBextractor* extractorRight, ORBVocabulary* voc, cv::Mat &K, cv::Mat &distCoef, const float &bf, const float &thDepth)
         :mpORBvocabulary(voc),mpORBextractorLeft(extractorLeft),mpORBextractorRight(extractorRight), mTimeStamp(timeStamp), mK(K.clone()),mDistCoef(distCoef.clone()), mbf(bf), mThDepth(thDepth),
          mpReferenceKF(static_cast<KeyFrame*>(NULL))
@@ -199,7 +199,7 @@ Frame::Frame(const cv::Mat &imLeft, const cv::Mat &imRight, const double &timeSt
     AssignFeaturesToGrid();
 }
 
-// 语义动态SLAM模式
+// Semantic Dynamic SLAM
 Frame::Frame(const cv::Mat &imLeft, const cv::Mat &imRight, cv::Mat & imColor,
              const double &timeStamp, ORBextractor* extractorLeft, ORBextractor* extractorRight, ORBVocabulary* voc, cv::Mat &K, cv::Mat &distCoef, const float &bf, const float &thDepth,
              Detector* YOLODetector)
@@ -207,8 +207,6 @@ Frame::Frame(const cv::Mat &imLeft, const cv::Mat &imRight, cv::Mat & imColor,
          mpReferenceKF(static_cast<KeyFrame*>(NULL))
 {
 
-
-    /// 1.
     // Frame ID
     mnId=nNextId++;
     mRawImg = imLeft.clone();
@@ -225,12 +223,11 @@ Frame::Frame(const cv::Mat &imLeft, const cv::Mat &imRight, cv::Mat & imColor,
     mvLevelSigma2 = mpORBextractorLeft->GetScaleSigmaSquares();
     mvInvLevelSigma2 = mpORBextractorLeft->GetInverseScaleSigmaSquares();
 
-    /// 2. 同时提取左右目特征
     // ORB extraction
-    thread threadLeft(&Frame::ExtractORB,this,0,imLeft); // 传递类的成员函数ExtractORB, 类的对象this, 0,imLeft是类成员函数的参数还是类构造函数的参数?
+    thread threadLeft(&Frame::ExtractORB,this,0,imLeft);
     thread threadRight(&Frame::ExtractORB,this,1,imRight);
 
-    // 这里就可以进行目标检测 或者 在线的跟踪
+
     threadLeft.join();
     threadRight.join();
 
@@ -239,24 +236,21 @@ Frame::Frame(const cv::Mat &imLeft, const cv::Mat &imRight, cv::Mat & imColor,
     if(mvKeys.empty())
         return;
 
-    /// 3. 对特征点undistor(利用畸变参数校正), 不是进行双目校正(已经进行过极线校正)
-    UndistortKeyPoints();//将mvKeys给mvKeysun, 但实际是一样的
 
-    /// 4. 计算双目间特征点的匹配，只有匹配成功的特征点会计算其深度,深度存放在 mvuRight和mvDepth中
-    /// mvuRight中存储的应该是左图像中的点所匹配的在右图像中的点的横坐标（纵坐标相同）
-    ComputeStereoMatches();//用的是mvKeys
+    UndistortKeyPoints();
 
-    /// 5. 对动态目标, 动态特征点的操作
+    ComputeStereoMatches();
+
     vector<DetectionObject*> vDetectionObjects;
     switch(EnOnlineDetectionMode)
     {
         case 0:
         {
-            OfflineDetectObject(vDetectionObjects);// 读取离线目标的数据
+            OfflineDetectObject(vDetectionObjects);// Read offline data
             int temp = 1;
-            if(temp) //如果有语义分割的结果
+            if(temp)
             {
-                switch(EnDataSetNameNum)  // 有没有必要得到mask图像
+                switch(EnDataSetNameNum)
                 {
                     case 0:{
                         // Kitti_tracking
@@ -274,17 +268,14 @@ Frame::Frame(const cv::Mat &imLeft, const cv::Mat &imRight, cv::Mat & imColor,
                         assert(0);
                 }
             }
-            else // 根据目标2D检测产生
+            else
             {
-                // 这一块该如何书写，因为我目前只有2D检测无法获取到目标的3D pose，
-                // 所以还是需要读取目标的离线pose， 用作备用：
-                // 1.目标第一次出现的时候，建立目标初始pose，是否可以用点的平均位置代替;
-                // 2.目标跟踪失败的时候;
+
             }
             break;
         }
 
-        case 1: // 在线
+        case 1: // online
         {
             std::vector<std::vector<Detection>> result = YOLODetector->Run(imColor, EfConfThres, EfIouThres);
             if(result.size() != 0)
@@ -292,9 +283,9 @@ Frame::Frame(const cv::Mat &imLeft, const cv::Mat &imRight, cv::Mat & imColor,
                 mMaskImg = cv::Mat::zeros(mRawImg.rows, mRawImg.cols, CV_8UC1);
                 for(auto &m: result[0])
                 {
-                    if(m.class_idx == 2 || m.class_idx == 7 ) // car truck当作动态目标，还可以加person
+                    if(m.class_idx == 2 || m.class_idx == 7 ) // car/truck as dynamic object
                     {
-                        cv::Rect tmp = m.bbox; // 如果有遮挡的话就有问题
+                        cv::Rect tmp = m.bbox;
                         cv::Mat m0 = mMaskImg(cv::Rect(tmp.x, tmp.y, tmp.width, tmp.height));
                         m0.setTo(255);
                     }
@@ -307,22 +298,12 @@ Frame::Frame(const cv::Mat &imLeft, const cv::Mat &imRight, cv::Mat & imColor,
     }
 
 
-    /// 5.3 将检测得到的ORB特征点分离为：静态特征点 与 目标特征点。
-    /// 函数参数：是否双目调用， 是否利用instance语义分割图像
-    /// 分离策略：0为静态, 255为忽略, 不为0且不为255为目标区域
-
     AssignFeatures(vDetectionObjects);
 
-    /// 6. 建立静态点的相关容器
     N = mvKeys.size();
     mvpMapPoints = vector<MapPoint*>(N,static_cast<MapPoint*>(NULL));
     mvbOutlier = vector<bool>(N,false);
 
-
-    /// 8. 一些全局参数赋值, 只会在初始的时候执行
-    /// (1) mfGridElementWidthInv, mfGridElementHeightInv:
-    /// 坐标乘以mfGridElementWidthInv和mfGridElementHeightInv就可以确定在哪个格子
-    /// (2) fx, fy, cx, cy相机内参
     if(mbInitialComputations)
     {
         ComputeImageBounds(imLeft);
@@ -338,14 +319,12 @@ Frame::Frame(const cv::Mat &imLeft, const cv::Mat &imRight, cv::Mat & imColor,
         mbInitialComputations=false;
     }
 
-    /// 9. 基线 (这个并不是特别理解?)
     mb = mbf/fx;
 
-    /// 10. 分配特征点到grid来加速特征匹配
     AssignFeaturesToGrid();
 }
 
-// 目标跟踪动态SLAM模式
+// Object Tracking + Dynamic SLAM
 Frame::Frame(const cv::Mat &imLeft, const cv::Mat &imRight, cv::Mat & imColor,
              const double &timeStamp, ORBextractor* extractorLeft, ORBextractor* extractorRight, ORBVocabulary* voc, cv::Mat &K, cv::Mat &distCoef, const float &bf, const float &thDepth,
              Detector* YOLODetector, cv::MultiTracker* multiTracker, vector<cv::Ptr<cv::Tracker>> vTrackers)
@@ -367,26 +346,23 @@ Frame::Frame(const cv::Mat &imLeft, const cv::Mat &imRight, cv::Mat & imColor,
     mvLevelSigma2 = mpORBextractorLeft->GetScaleSigmaSquares();
     mvInvLevelSigma2 = mpORBextractorLeft->GetInverseScaleSigmaSquares();
 
-    thread threadLeft(&Frame::ExtractORB,this,0,imLeft); // 传递类的成员函数ExtractORB, 类的对象this, 0,imLeft是类成员函数的参数还是类构造函数的参数?
+    thread threadLeft(&Frame::ExtractORB,this,0,imLeft);
     thread threadRight(&Frame::ExtractORB,this,1,imRight);
 
-    // 这里就可以进行目标检测 或者 在线的跟踪
+
     threadLeft.join();
-    threadRight.join(); // 目标跟踪可以改成线程
+    threadRight.join();
 
     N = mvKeys.size();
 
     if(mvKeys.empty())
         return;
 
-    /// 3. 对特征点undistor(利用畸变参数校正), 不是进行双目校正(已经进行过极线校正)
-    UndistortKeyPoints();//将mvKeys给mvKeysun, 但实际是一样的
 
-    /// 4. 计算双目间特征点的匹配，只有匹配成功的特征点会计算其深度,深度存放在 mvuRight和mvDepth中
-    /// mvuRight中存储的应该是左图像中的点所匹配的在右图像中的点的横坐标（纵坐标相同）
-    ComputeStereoMatches();//用的是mvKeys
+    UndistortKeyPoints();
 
-    /// 5. 对动态目标, 动态特征点的操作
+    ComputeStereoMatches();
+
     // tracker
     mMaskImg = cv::Mat::zeros(mRawImg.rows, mRawImg.cols, CV_8UC1);
     vector<DetectionObject*> vDetectionObjects;
@@ -396,14 +372,11 @@ Frame::Frame(const cv::Mat &imLeft, const cv::Mat &imRight, cv::Mat & imColor,
     for(size_t i=0; i < vDetectionObjects.size(); i++)
     {
         cv::Rect tmp = vDetectionObjects[i]->mrectBBox;
-
-        // 如果tmp不在图像的范围需要被处理
-
         int id = vDetectionObjects[i]->mnObjectID;
         cv::Mat m0 = mMaskImg(cv::Rect(tmp.x, tmp.y, tmp.width, tmp.height));
         m0.setTo(255);
     }
-    // YOLO
+
     if(EbYoloActive)
     {
         std::vector<std::vector<Detection>> result = YOLODetector->Run(imColor, EfConfThres, EfIouThres);
@@ -411,9 +384,9 @@ Frame::Frame(const cv::Mat &imLeft, const cv::Mat &imRight, cv::Mat & imColor,
         {
             for(auto &m: result[0])
             {
-                if(m.class_idx == 2 || m.class_idx == 7 ) // car truck当作动态目标，还可以加person
+                if(m.class_idx == 2 || m.class_idx == 7 )
                 {
-                    cv::Rect tmp = m.bbox; // 如果有遮挡的话就有问题
+                    cv::Rect tmp = m.bbox;
                     cv::Mat m0 = mMaskImg(cv::Rect(tmp.x, tmp.y, tmp.width, tmp.height));
                     m0.setTo(255);
                 }
@@ -421,24 +394,13 @@ Frame::Frame(const cv::Mat &imLeft, const cv::Mat &imRight, cv::Mat & imColor,
         }
     }
 
-    //cout<<endl<<" 建立Frame "<< mnId<<"  检测原始2D目标数: "<<vDetectionObjects.size()<<endl;
-
-    /// 5.3 将检测得到的ORB特征点分离为：静态特征点 与 目标特征点。
-    /// 函数参数：是否双目调用， 是否利用instance语义分割图像
-    /// 分离策略：0为静态, 255为忽略, 不为0且不为255为目标区域
     vDetectionObjects.clear();
     AssignFeatures(vDetectionObjects);
 
-    /// 6. 建立静态点的相关容器
     N = mvKeys.size();
     mvpMapPoints = vector<MapPoint*>(N,static_cast<MapPoint*>(NULL));
     mvbOutlier = vector<bool>(N,false);
 
-
-    /// 8. 一些全局参数赋值, 只会在初始的时候执行
-    /// (1) mfGridElementWidthInv, mfGridElementHeightInv:
-    /// 坐标乘以mfGridElementWidthInv和mfGridElementHeightInv就可以确定在哪个格子
-    /// (2) fx, fy, cx, cy相机内参
     if(mbInitialComputations)
     {
         ComputeImageBounds(imLeft);
@@ -454,15 +416,15 @@ Frame::Frame(const cv::Mat &imLeft, const cv::Mat &imRight, cv::Mat & imColor,
         mbInitialComputations=false;
     }
 
-    /// 9. 基线 (这个并不是特别理解?)
+
     mb = mbf/fx;
 
-    /// 10. 分配特征点到grid来加速特征匹配
+
     AssignFeaturesToGrid();
 }
 
 
-// 目标跟踪的模式
+// Object Tracking Mode
 Frame::Frame(const cv::Mat &imLeft, const cv::Mat &imRight, cv::Mat & imColor,
                  const double &timeStamp, ORBextractor* extractorLeft, ORBextractor* extractorRight, ORBVocabulary* voc, cv::Mat &K, cv::Mat &distCoef, const float &bf, const float &thDepth,
                  cv::MultiTracker* multiTracker, vector<cv::Ptr<cv::Tracker>> vTrackers)
@@ -484,32 +446,28 @@ Frame::Frame(const cv::Mat &imLeft, const cv::Mat &imRight, cv::Mat & imColor,
     mvLevelSigma2 = mpORBextractorLeft->GetScaleSigmaSquares();
     mvInvLevelSigma2 = mpORBextractorLeft->GetInverseScaleSigmaSquares();
 
-    thread threadLeft(&Frame::ExtractORB,this,0,imLeft); // 传递类的成员函数ExtractORB, 类的对象this, 0,imLeft是类成员函数的参数还是类构造函数的参数?
+    thread threadLeft(&Frame::ExtractORB,this,0,imLeft);
     thread threadRight(&Frame::ExtractORB,this,1,imRight);
 
-    // 这里就可以进行目标检测 或者 在线的跟踪
     threadLeft.join();
-    threadRight.join(); // 目标跟踪可以改成线程
+    threadRight.join();
 
     N = mvKeys.size();
 
     if(mvKeys.empty())
         return;
 
-    /// 3. 对特征点undistor(利用畸变参数校正), 不是进行双目校正(已经进行过极线校正)
-    UndistortKeyPoints();//将mvKeys给mvKeysun, 但实际是一样的
 
-    /// 4. 计算双目间特征点的匹配，只有匹配成功的特征点会计算其深度,深度存放在 mvuRight和mvDepth中
-    /// mvuRight中存储的应该是左图像中的点所匹配的在右图像中的点的横坐标（纵坐标相同）
-    ComputeStereoMatches();//用的是mvKeys
+    UndistortKeyPoints();
+    ComputeStereoMatches();
 
-    /// 5. 对动态目标, 动态特征点的操作
+
     vector<DetectionObject*> vDetectionObjects;
-    if(ORB_SLAM2::EnOnlineDetectionMode) // 在线目标跟踪
+    if(ORB_SLAM2::EnOnlineDetectionMode)
     {
         Online2DObjectTracking(multiTracker, vTrackers, vDetectionObjects);
     }
-    else // 读取离线数据
+    else
     {
         OfflineDetectObject(vDetectionObjects);
     }
@@ -525,26 +483,15 @@ Frame::Frame(const cv::Mat &imLeft, const cv::Mat &imRight, cv::Mat & imColor,
         cv::Mat m1 = mMaskImg(cv::Rect(tmp.x + th1, tmp.y + th2, tmp.width-th3-th1, tmp.height - th2 - th4));
         m1.setTo(id+1);
     }
-    cout<<endl<<" 建立Frame "<< mnId<<"  检测原始2D目标数: "<<vDetectionObjects.size()<<endl;
+    cout<<endl<<" Frame "<< mnId<<"  The number of detected 2D objects: "<<vDetectionObjects.size()<<endl;
 
-    /// 5.3 将检测得到的ORB特征点分离为：静态特征点 与 目标特征点。
-    /// 函数参数：是否双目调用， 是否利用instance语义分割图像
-    /// 分离策略：0为静态, 255为忽略, 不为0且不为255为目标区域
+
     AssignFeatures(vDetectionObjects);
-    //AssignFeatures(vDetectionObjects, true, false, true);
 
-
-
-    /// 6. 建立静态点的相关容器
     N = mvKeys.size();
     mvpMapPoints = vector<MapPoint*>(N,static_cast<MapPoint*>(NULL));
     mvbOutlier = vector<bool>(N,false);
 
-
-    /// 8. 一些全局参数赋值, 只会在初始的时候执行
-    /// (1) mfGridElementWidthInv, mfGridElementHeightInv:
-    /// 坐标乘以mfGridElementWidthInv和mfGridElementHeightInv就可以确定在哪个格子
-    /// (2) fx, fy, cx, cy相机内参
     if(mbInitialComputations)
     {
         ComputeImageBounds(imLeft);
@@ -560,17 +507,15 @@ Frame::Frame(const cv::Mat &imLeft, const cv::Mat &imRight, cv::Mat & imColor,
         mbInitialComputations=false;
     }
 
-    /// 9. 基线 (这个并不是特别理解?)
     mb = mbf/fx;
 
-    /// 10. 分配特征点到grid来加速特征匹配
     AssignFeaturesToGrid();
 }
 
-// 自动驾驶模式
+// Autonomous Driving Mode
 Frame::Frame(const cv::Mat &imLeft, const cv::Mat &imRight, cv::Mat & imColor,
              const double &timeStamp, ORBextractor* extractorLeft, ORBextractor* extractorRight, ORBVocabulary* voc, cv::Mat &K, cv::Mat &distCoef, const float &bf, const float &thDepth,
-             Detector* YOLODetector, DS::DeepSort* deepSort) // 参数不对， 应该还有deepsort的参数
+             Detector* YOLODetector, DS::DeepSort* deepSort)
         :mpORBvocabulary(voc),mpORBextractorLeft(extractorLeft),mpORBextractorRight(extractorRight), mTimeStamp(timeStamp), mK(K.clone()),mDistCoef(distCoef.clone()), mbf(bf), mThDepth(thDepth),
          mpReferenceKF(static_cast<KeyFrame*>(NULL))
 {
@@ -590,12 +535,10 @@ Frame::Frame(const cv::Mat &imLeft, const cv::Mat &imRight, cv::Mat & imColor,
 
     vector<DetectionObject*> vDetectionObjects;
 
-    // 同时提取左右目特征
     // ORB extraction
-    thread threadLeft(&Frame::ExtractORB,this,0,imLeft); // 传递类的成员函数ExtractORB, 类的对象this, 0,imLeft是类成员函数的参数还是类构造函数的参数?
+    thread threadLeft(&Frame::ExtractORB,this,0,imLeft);
     thread threadRight(&Frame::ExtractORB,this,1,imRight);
     // YOLO detection
-    // 形参类型为引用时，不要直接传入，需要用std::ref(参数)
     thread threadBBox(&Frame::DetectYOLO,this,std::ref(imColor),std::ref(vDetectionObjects),YOLODetector,deepSort,imLeft,imRight);
     threadLeft.join();
     threadRight.join();
@@ -609,58 +552,34 @@ Frame::Frame(const cv::Mat &imLeft, const cv::Mat &imRight, cv::Mat & imColor,
     UndistortObjKeyPoints();
     ComputeObjStereoMatches();
 
-    cout<<"目标点提取个数: "<<mvTempObjKeys.size();
+    cout<<"The number of object features: "<<mvTempObjKeys.size();
 
-    /// 3. 对特征点undistor(利用畸变参数校正), 不是进行双目校正(已经进行过极线校正)
-    UndistortKeyPoints();//将mvKeys给mvKeysun, 但实际是一样的
+    UndistortKeyPoints();
+    ComputeStereoMatches();
 
-    /// 4. 计算双目间特征点的匹配，只有匹配成功的特征点会计算其深度,深度存放在 mvuRight和mvDepth中
-    /// mvuRight中存储的应该是左图像中的点所匹配的在右图像中的点的横坐标（纵坐标相同）
-    ComputeStereoMatches();//用的是mvKeys
-
-    /// 5.2 从离线结果Kitti_AllTrackingObjectInformation中得到当前帧的objects信息：  std::vector<cuboid *> cuboids_on_frame
 
     switch(EnOnlineDetectionMode)
     {
         case 0:
         {
-            OfflineDetectObject(vDetectionObjects);// 读取离线目标的数据
+            OfflineDetectObject(vDetectionObjects);// Read offline data
             int temp = 1;
-            if(temp) //如果有语义分割的结果
+            if(temp)
             {
-                switch(EnDataSetNameNum)  // 有没有必要得到mask图像
+                switch(EnDataSetNameNum)
                 {
                     case 0:{
                         // Kitti_tracking
                         std::string MOTS_PNG_folder = EstrDatasetFolder + "/Segmentation/";
                         mMaskImg = ReadKittiSegmentationImage(MOTS_PNG_folder, ORB_SLAM2::EnStartFrameId);
 
-                        /*
-                        cout<<mMaskImg<<endl;
-
-                        for(int i=0; i<mMaskImg.rows;i++)
-                        {
-                            for(int j=0; j<mMaskImg.cols;j++)
-                            {
-                                int x = int(mMaskImg.at<u_int8_t>(i, j));
-                                if(x == 8)
-                                    mMaskImg.at<u_int8_t>(i,j) = 255;
-                                else
-                                    mMaskImg.at<u_int8_t>(i,j) = 0;
-                            }
-                        }
-
-                        cv::imshow("test",mMaskImg);
-                        cv::waitKey(0);*/
-
                         if(EbUseSegementation == false)
                         {
-                            // 产生一个mask用做特征分配
                             mMaskImg = cv::Mat::zeros(mRawImg.rows, mRawImg.cols, CV_8UC1);
                             double th1 = 10, th2 = 10, th3 = 10, th4 = 10;
-                            for(size_t i=0; i < vDetectionObjects.size(); i++) // 向内缩进得到目标的id
+                            for(size_t i=0; i < vDetectionObjects.size(); i++)
                             {
-                                cv::Rect tmp = vDetectionObjects[i]->mrectBBox; // 如果有遮挡的话就有问题
+                                cv::Rect tmp = vDetectionObjects[i]->mrectBBox;
                                 int id = vDetectionObjects[i]->mnObjectID;
                                 cv::Mat m0 = mMaskImg(cv::Rect(tmp.x, tmp.y, tmp.width, tmp.height));
                                 m0.setTo(255);
@@ -669,37 +588,14 @@ Frame::Frame(const cv::Mat &imLeft, const cv::Mat &imRight, cv::Mat & imColor,
                             }
                         }
 
-
-                        //cv::imshow("test",mMaskImg);
-                        //cv::waitKey(0);
-
-
-                        /*
-                        for(int i=0; i<mMaskImg.rows;i++)
-                        {
-                            for(int j=0; j<mMaskImg.cols;j++)
-                            {
-                                int x = int(mMaskImg.at<u_int8_t>(i, j));
-                                if(x == 8)
-                                    mMaskImg.at<u_int8_t>(i,j) = 255;
-                                else
-                                    mMaskImg.at<u_int8_t>(i,j) = 0;
-                            }
-                        }
-
-                        cv::imshow("test2",mMaskImg);
-                        cv::waitKey(0);
-                         */
-
                         break;
                     }
                     case 1: {
                         // Virtual_kitti
-                        // 是否是需要mMaskImg的 以及光流的图像
-                        // 像素值为trackID+1， 0 表示不是vehicle(可以简单认为是静态)
+                        // The pixel value is trackID+1， 0 denotes the background
                         std::string MOTS_forvirtualKitti = EstrDatasetFolder + "/Segpgm/";
                         mMaskImg = ReadVirtualKittiSegmentationImage(MOTS_forvirtualKitti, ORB_SLAM2::EnStartFrameId);
-                        // 读取光流图像 后面需要把光流图像去掉
+                        // Read the optical flow images
                         std::string ForwardOpticalFlowFolder = EstrDatasetFolder + "/forwardFlow/";
                         mForwardOpticalImg = ReadVirtualKittiForwardOpticalFlow(ForwardOpticalFlowFolder, ORB_SLAM2::EnStartFrameId);
                         break;
@@ -708,19 +604,17 @@ Frame::Frame(const cv::Mat &imLeft, const cv::Mat &imRight, cv::Mat & imColor,
                         assert(0);
                 }
             }
-            else // 根据目标2D检测产生
+            else
             {
-                // 这一块该如何书写，因为我目前只有2D检测无法获取到目标的3D pose，
-                // 所以还是需要读取目标的离线pose， 用作备用：
-                // 1.目标第一次出现的时候，建立目标初始pose，是否可以用点的平均位置代替;
-                // 2.目标跟踪失败的时候;
+
 
             }
             break;
         }
 
-        case 1: // 在线
+        case 1: // online
         {
+            // This process has been performed in parallel with ORB extraction.
             //DetectYOLO(imColor,vDetectionObjects,YOLODetector,deepSort);
             break;
         }
@@ -728,25 +622,17 @@ Frame::Frame(const cv::Mat &imLeft, const cv::Mat &imRight, cv::Mat & imColor,
             assert(0);
     }
 
-    cout<<endl<<YELLOW<<"建立Frame:"<<mnId<<" 检测原始2D目标数:"<<vDetectionObjects.size()<<WHITE<<endl;
+    cout<<endl<<YELLOW<<"Frame: "<<mnId<<" The number of 2D detected objects:"<<vDetectionObjects.size()<<WHITE<<endl;
+
+    // Input a mask.
+    // The area whose mask is 0 is background, 255 is sensitive, and 1-249 is the object area (object ID+1)
+    AssignFeatures(vDetectionObjects);
 
 
-    // 5.3 将检测得到的ORB特征点分离为：静态特征点 与 目标特征点。
-    AssignFeatures(vDetectionObjects);// 输入一个mask， 这个mask为0的区域为静态， 255为敏感区域， 1-249为目标区域（目标的id+1）
-
-
-
-
-    /// 6. 建立静态点的相关容器
     N = mvKeys.size();
     mvpMapPoints = vector<MapPoint*>(N,static_cast<MapPoint*>(NULL));
     mvbOutlier = vector<bool>(N,false);
 
-
-    /// 8. 一些全局参数赋值, 只会在初始的时候执行
-    /// (1) mfGridElementWidthInv, mfGridElementHeightInv:
-    /// 坐标乘以mfGridElementWidthInv和mfGridElementHeightInv就可以确定在哪个格子
-    /// (2) fx, fy, cx, cy相机内参
     if(mbInitialComputations)
     {
         ComputeImageBounds(imLeft);
@@ -762,20 +648,18 @@ Frame::Frame(const cv::Mat &imLeft, const cv::Mat &imRight, cv::Mat & imColor,
         mbInitialComputations=false;
     }
 
-    /// 9. 基线 (这个并不是特别理解?)
     mb = mbf/fx;
 
-    /// 10. 分配特征点到grid来加速特征匹配
-    //放入Track中
+
     AssignFeaturesToGrid();
 
 }
 
 
-// 终极测试模式
+// Test Mode
 Frame::Frame(const cv::Mat &imLeft, const cv::Mat &imRight, cv::Mat & imColor,
              const double &timeStamp, ORBextractor* extractorLeft, ORBextractor* extractorRight, ORBVocabulary* voc, cv::Mat &K, cv::Mat &distCoef, const float &bf, const float &thDepth,
-             const int& SLOTMode) // 参数不对， 应该还有deepsort的参数
+             const int& SLOTMode)
         :mpORBvocabulary(voc),mpORBextractorLeft(extractorLeft),mpORBextractorRight(extractorRight), mTimeStamp(timeStamp), mK(K.clone()),mDistCoef(distCoef.clone()), mbf(bf), mThDepth(thDepth),
          mpReferenceKF(static_cast<KeyFrame*>(NULL))
 {
@@ -795,10 +679,10 @@ Frame::Frame(const cv::Mat &imLeft, const cv::Mat &imRight, cv::Mat & imColor,
     mvLevelSigma2 = mpORBextractorLeft->GetScaleSigmaSquares();
     mvInvLevelSigma2 = mpORBextractorLeft->GetInverseScaleSigmaSquares();
 
-    /// 5.2 从离线结果Kitti_AllTrackingObjectInformation中得到当前帧的objects信息：  std::vector<cuboid *> cuboids_on_frame
+
     vector<DetectionObject*> vDetectionObjects;
-    OfflineDetectObject(vDetectionObjects);// 读取离线目标的数据
-    switch(EnDataSetNameNum)  // 直接用mask图像
+    OfflineDetectObject(vDetectionObjects);
+    switch(EnDataSetNameNum)
     {
         case 0:{
             // Kitti_tracking
@@ -809,11 +693,10 @@ Frame::Frame(const cv::Mat &imLeft, const cv::Mat &imRight, cv::Mat & imColor,
         }
         case 1: {
             // Virtual_kitti
-            // 是否是需要mMaskImg的 以及光流的图像
-            // 像素值为trackID+1， 0 表示不是vehicle(可以简单认为是静态)
+            // The pixel value is trackID+1， 0 denotes the background
             std::string MOTS_forvirtualKitti = EstrDatasetFolder + "/Segpgm/";
             mMaskImg = ReadVirtualKittiSegmentationImage(MOTS_forvirtualKitti, ORB_SLAM2::EnStartFrameId);
-            // 读取光流图像 后面需要把光流图像去掉
+            // Read the optical flow images
             std::string ForwardOpticalFlowFolder = EstrDatasetFolder + "/forwardFlow/";
             mForwardOpticalImg = ReadVirtualKittiForwardOpticalFlow(ForwardOpticalFlowFolder, ORB_SLAM2::EnStartFrameId);
             break;
@@ -822,7 +705,6 @@ Frame::Frame(const cv::Mat &imLeft, const cv::Mat &imRight, cv::Mat & imColor,
             assert(0);
     }
 
-    // 同时提取左右目特征
     // ORB extraction
     thread threadLeft(&Frame::ExtractORB,this,0,imLeft);
     thread threadRight(&Frame::ExtractORB,this,1,imRight);
@@ -835,34 +717,26 @@ Frame::Frame(const cv::Mat &imLeft, const cv::Mat &imRight, cv::Mat & imColor,
     if(mvKeys.empty())
         return;
 
-    /// 3. 对特征点undistor(利用畸变参数校正), 不是进行双目校正(已经进行过极线校正)
-    UndistortKeyPoints();//将mvKeys给mvKeysun, 但实际是一样的
+    UndistortKeyPoints();
 
-    /// 4. 计算双目间特征点的匹配，只有匹配成功的特征点会计算其深度,深度存放在 mvuRight和mvDepth中
-    /// mvuRight中存储的应该是左图像中的点所匹配的在右图像中的点的横坐标（纵坐标相同）
-    ComputeStereoMatches();//用的是mvKeys
+    ComputeStereoMatches();
 
     UndistortObjKeyPoints();
     ComputeObjStereoMatches();
 
 
 
-    cout<<endl<<YELLOW<<"建立Frame:"<<mnId<<" 检测原始2D目标数:"<<vDetectionObjects.size()<<WHITE<<endl;
+    cout<<endl<<YELLOW<<"Frame: "<<mnId<<" The number of 2D detected objects:"<<vDetectionObjects.size()<<WHITE<<endl;
 
-    // 5.3 将检测得到的ORB特征点分离为：静态特征点 与 目标特征点。
-    AssignFeatures(vDetectionObjects);// 输入一个mask， 这个mask为0的区域为静态， 255为敏感区域， 1-249为目标区域（目标的id+1）
+    // Input a mask.
+    // The area whose mask is 0 is background, 255 is sensitive, and 1-249 is the object area (object ID+1)
+    AssignFeatures(vDetectionObjects);
 
 
-    /// 6. 建立静态点的相关容器
     N = mvKeys.size();
     mvpMapPoints = vector<MapPoint*>(N,static_cast<MapPoint*>(NULL));
     mvbOutlier = vector<bool>(N,false);
 
-
-    /// 8. 一些全局参数赋值, 只会在初始的时候执行
-    /// (1) mfGridElementWidthInv, mfGridElementHeightInv:
-    /// 坐标乘以mfGridElementWidthInv和mfGridElementHeightInv就可以确定在哪个格子
-    /// (2) fx, fy, cx, cy相机内参
     if(mbInitialComputations)
     {
         ComputeImageBounds(imLeft);
@@ -878,16 +752,13 @@ Frame::Frame(const cv::Mat &imLeft, const cv::Mat &imRight, cv::Mat & imColor,
         mbInitialComputations=false;
     }
 
-    /// 9. 基线 (这个并不是特别理解?)
     mb = mbf/fx;
 
-    /// 10. 分配特征点到grid来加速特征匹配
+
     AssignFeaturesToGrid();
+
 }
 
-
-/// 将检测得到的ORB特征点分离为：静态特征点 与 目标特征点。 函数参数：是否双目调用， 是否利用instance语义分割图像
-/// 分离策略：0为静态, 255为忽略, 不为0且不为255为目标区域
 void Frame::AssignFeatures(vector<DetectionObject*> &vDetectionObjects)
 {
     std::vector<cv::KeyPoint> mvKeys_cp;
@@ -935,29 +806,30 @@ void Frame::AssignFeatures(vector<DetectionObject*> &vDetectionObjects)
     mvOriDepth.reserve(nObjNum);
     mvuOriRight.reserve(nObjNum);
 
-    /// 2. 分配 特征点
-    /// 策略为： 特征点在像素值为0的区域为静态; 特征点在像素值不为0区域(除开255, 255为忽略区域)为动态
+    // Features assignment
+    // The feature point belongs to background in the area with a pixel value of 0;
+    // The feature point belongs to objects in the area where the pixel value is not 0 (except 255, 255 is the ignored area)
     int staticnumber = 0;
     for (size_t i = 0; i < mvKeys.size(); i++)
     {
         int x = mvKeys[i].pt.x;
         int y = mvKeys[i].pt.y;
 
-        /// 静态区域：像素值为0
+
         if (int(mMaskImg.at<u_int8_t>(y, x)) == 0)
         {
-            /// 将静态区域的ORB特征点放入mvKeys_cp
+
             mvKeys_cp.push_back(mvKeys[i]);
             mDescriptors_cp.push_back(mDescriptors.row(i));
-            mvKeysUn_cp.push_back(mvKeysUn[i]);//TODO 这是畸变后?
+            mvKeysUn_cp.push_back(mvKeysUn[i]);
             mvuRight_cp.push_back(mvuRight[i]);
             mvDepth_cp.push_back(mvDepth[i]);
             staticnumber++;
         }
 
         else{
-            //将目标区域的特征点存其来，以备归还
-            /// 目标区域： 像素值不为0且不为255
+            // Save the sparse feature points of the object area
+            // Object area: the pixel value is not 0 and not 255
             int object_id_temp = int(mMaskImg.at<u_int8_t>(y, x));
             if (object_id_temp != 0 && object_id_temp != 255)
             {
@@ -994,13 +866,13 @@ void Frame::AssignFeatures(vector<DetectionObject*> &vDetectionObjects)
         }
 
     }
-
+    // More Dense features for Object area
     for (size_t i = 0; i < mvTempObjKeys.size(); i++)
     {
         int x = mvTempObjKeys[i].pt.x;
         int y = mvTempObjKeys[i].pt.y;
 
-        /// 目标区域： 像素值不为0且不为255
+        //Object area: the pixel value is not 0 and not 255
         int object_id_temp = int(mMaskImg.at<u_int8_t>(y, x));
         if (object_id_temp != 0 && object_id_temp != 255)
         {
@@ -1012,7 +884,7 @@ void Frame::AssignFeatures(vector<DetectionObject*> &vDetectionObjects)
                 if (vDetectionObjects[j]->mnObjectID>255)
                     id = vDetectionObjects[j]->mnObjectID - 255;
                 else id = vDetectionObjects[j]->mnObjectID;
-                if (id == object_id_temp - 1) // 2D 检测的object id = mask object id -1
+                if (id == object_id_temp - 1) //2D detected object id=mask object id - 1
                 {
                     mvObjKeys_cp[j].push_back(mvTempObjKeys[i]);
                     mvObjPointsDescriptors_cp[j].push_back(mTempObjPointsDescriptors.row(i));
@@ -1031,20 +903,20 @@ void Frame::AssignFeatures(vector<DetectionObject*> &vDetectionObjects)
 
     }
 
-    //cout<<"特征分配开始： ";
-   // cout<<"帧号： "<<mnId<<"   静态2D点数量： "<<mvKeys.size();
+    //cout<<"Features assignment starts： ";
+   // cout<<"Frame： "<<mnId<<"   static features number： "<<mvKeys.size();
 
     if(EnSLOTMode == 1)
         return;
 
-    for(size_t i=0; i<nObjNum;i++) // 初始化目标相关容器
+    for(size_t i=0; i<nObjNum;i++)
     {
         if (!vDetectionObjects[i])
             continue;
         size_t nFeaNum = mvObjKeys_cp[i].size();
         size_t nEffectiveDepthFeaNum = vnEffectiveObjPointDepthNums[i];
         DetectionObject* cCuboidTmp = vDetectionObjects[i];
-        //cout<<"  目标"<< cCuboidTmp->mnObjectID<<"的2D点数量： "<<nFeaNum<<",是否初始化:"<<cCuboidTmp->mInitflag;
+        //cout<<"  Object "<< cCuboidTmp->mnObjectID<<" 2D features number： "<<nFeaNum;
 //        if(nFeaNum < EnInitDetObjORBFeaturesNum || nEffectiveDepthFeaNum < 0.8*EnInitDetObjORBFeaturesNum || EobjTrackEndHash.count(cCuboidTmp->mnObjectID)) // 如果点太少 或者 合适点太少 或者 该目标已经跟踪结束
 //        {
 //            vDetectionObjects[i] = static_cast<DetectionObject*>(NULL);
@@ -1055,7 +927,7 @@ void Frame::AssignFeatures(vector<DetectionObject*> &vDetectionObjects)
 //                mvKeysUn_cp.push_back(mvOriKeysUn_cp[i][j]);
 //                mvuRight_cp.push_back(mvuOriRight_cp[i][j]);
 //            }
-//            cout<<RED<<"  已删除该目标  "<<WHITE;
+//            cout<<RED<<"  Deleted  "<<WHITE;
 //            delete cCuboidTmp;
 //            continue;
 //        }
@@ -1073,12 +945,12 @@ void Frame::AssignFeatures(vector<DetectionObject*> &vDetectionObjects)
         mvuOriRight.push_back(mvuOriRight_cp[i]);
 
         cCuboidTmp->InitInFrameMapObjectPointsOrder(nFeaNum);
-        //cout<<"  目标"<< cCuboidTmp->mnObjectID<<"的2D点数量： "<<nFeaNum;
+        //cout<<"  Object "<< cCuboidTmp->mnObjectID<<" 2D features number： "<<nFeaNum;
     }
 
-    // 静态
+    // background features
     mvKeys = mvKeys_cp;
-    mDescriptors = mDescriptors_cp.clone();//删除目标上的特征点和描述子
+    mDescriptors = mDescriptors_cp.clone();
     mvDepth = mvDepth_cp;
     mvuRight = mvuRight_cp;
     mvKeysUn = mvKeysUn_cp;
@@ -1125,10 +997,10 @@ int Frame::FindDetectionObject(DetectionObject* mCuboidTmp)
 
 
 
-/// kitti数据集的MOTS图像转成imgMasK图像（返回值）
-/// imgMask： 灰度值为255的区域为其他区域，为0为静态区域，为1-50为object(这里的object只包括vehicle，person也被归入了其他区域)的区域，
-/// 其值代表object_id(就是它本身的instance id，已经证明instance id与2D detetction的id是一致的)
-/// imgLabel： 只是为了显示用
+///Convert MOTS image of kitti dataset to imgMasK image (return value)
+///ImgMask: The area with a gray value of 255 is other area, 0 is static area, and 1-50 is area of object (here the object only includes vehicle, and person is also included in other areas),
+///Its value represents the object_ ID (is its own instance ID, which has been proved to be consistent with the ID of 2D detetction)
+///ImgLabel: only for display
 cv::Mat Frame::ReadKittiSegmentationImage(const string &strFolder, const int &nFrameId)
 {
     char frame_index_c[256];
@@ -1139,37 +1011,30 @@ cv::Mat Frame::ReadKittiSegmentationImage(const string &strFolder, const int &nF
 
     cv::Mat imgceshi = cv::imread(MOTS_PNG_Pathname,0);
 
-    /// debug用， 用于显示语义分割结果
+
     cv::Mat imgLabel(Img_Init_MOTS.rows, Img_Init_MOTS.cols, CV_8UC3);
-    // TODO 这里的类型也是大坑， CV_UC3和CV_32SC1到底是什么意思需要搞清楚， 因为换成其他的就会报错。
+
     cv::Mat imgMask(imgLabel.rows, imgLabel.cols,CV_8UC1);/// 32位有符号整型单通道
     for(int i=0; i<Img_Init_MOTS.rows;i++)
     {
         for(int j=0;j<Img_Init_MOTS.cols;j++)
         {
             int tmp;
-            // TODO  大坑！！！！！！， 这里的数据类型一定要是和python的一样u_int16_t
-            // TODO  u_int16_t  到底是什么？？？？u_int16_t
             tmp = Img_Init_MOTS.at<u_int16_t>(i,j);
 
-            /// 需要忽略的部分(包括真正需要忽略的部分和行人)， 黑色
-            /// 这是其他区域
             if(tmp==10000)
             {
 
                 imgMask.at<u_int8_t>(i,j) = 255;
                 imgLabel.at<cv::Vec3b>(i,j) = cv::Vec3b(0,0,0);
             }
-            /// background, label图像为白色， mask为0
-            /// 这是静态区域
+
             else if(tmp == 0)
             {
                 imgMask.at<u_int8_t>(i,j) = 0;
                 imgLabel.at<cv::Vec3b>(i,j) = cv::Vec3b(255, 255, 255);
             }
-            /// 车， label图像各种颜色1-49， mask图像灰度值为其instance number
-            // TODO 关键问题是语义分割的object_id是否与真正跟踪的object_id一致???? 是一致的
-            /// 这是目标区域
+
             else if(tmp >=1000 && tmp<2000)
             {
                 int instance_label = tmp % 1000;
@@ -1334,7 +1199,7 @@ cv::Mat Frame::ReadKittiSegmentationImage(const string &strFolder, const int &nF
                         break;
                 }
             }
-            /// 行人， 也是需要忽略的部分， label图像为黑色， mask为255
+
             else
             {
                 imgMask.at<u_int8_t>(i,j) = 255;
@@ -1347,7 +1212,6 @@ cv::Mat Frame::ReadKittiSegmentationImage(const string &strFolder, const int &nF
 //    cv::imshow("img", imgLabel);
 //    cv::waitKey(0);
 
-    /// 显示
     return imgMask;
 }
 cv::Mat Frame::ReadKittiSegmentationImage(const string &strFolder, const int &nFrameId, bool rightseg)
@@ -1360,21 +1224,17 @@ cv::Mat Frame::ReadKittiSegmentationImage(const string &strFolder, const int &nF
 
     cv::Mat imgceshi = cv::imread(MOTS_PNG_Pathname,0);
 
-    /// debug用， 用于显示语义分割结果
+
     cv::Mat imgLabel(Img_Init_MOTS.rows, Img_Init_MOTS.cols, CV_8UC3);
-    // TODO 这里的类型也是大坑， CV_UC3和CV_32SC1到底是什么意思需要搞清楚， 因为换成其他的就会报错。
-    cv::Mat imgMask(imgLabel.rows, imgLabel.cols,CV_8UC1);/// 32位有符号整型单通道
+
+    cv::Mat imgMask(imgLabel.rows, imgLabel.cols,CV_8UC1);
     for(int i=0; i<Img_Init_MOTS.rows;i++)
     {
         for(int j=0;j<Img_Init_MOTS.cols;j++)
         {
             int tmp;
-            // TODO  大坑！！！！！！， 这里的数据类型一定要是和python的一样u_int16_t
-            // TODO  u_int16_t  到底是什么？？？？u_int16_t
-            tmp = Img_Init_MOTS.at<u_int16_t>(i,j);
 
-            /// 需要忽略的部分(包括真正需要忽略的部分和行人)， 黑色
-            /// 这是其他区域
+            tmp = Img_Init_MOTS.at<u_int16_t>(i,j);
             if(tmp==10000)
             {
 
@@ -1390,16 +1250,13 @@ cv::Mat Frame::ReadKittiSegmentationImage(const string &strFolder, const int &nF
                     }
                 }
             }
-                /// background, label图像为白色， mask为0
-                /// 这是静态区域
+
             else if(tmp == 0)
             {
                 imgMask.at<u_int8_t>(i,j) = 0;
                 imgLabel.at<cv::Vec3b>(i,j) = cv::Vec3b(255, 255, 255);
             }
-                /// 车， label图像各种颜色1-49， mask图像灰度值为其instance number
-                // TODO 关键问题是语义分割的object_id是否与真正跟踪的object_id一致???? 是一致的
-                /// 这是目标区域
+
             else if(tmp >=1000 && tmp<2000)
             {
                 int instance_label = tmp % 1000;
@@ -1572,7 +1429,7 @@ cv::Mat Frame::ReadKittiSegmentationImage(const string &strFolder, const int &nF
                         break;
                 }
             }
-                /// 行人， 也是需要忽略的部分， label图像为黑色， mask为255
+
             else
             {
                 imgMask.at<u_int8_t>(i,j) = 255;
@@ -1582,14 +1439,13 @@ cv::Mat Frame::ReadKittiSegmentationImage(const string &strFolder, const int &nF
         }
     }
 
-//    cv::imshow("img", imgMask);
-//    cv::waitKey(0);
-
-    /// 显示
     return imgMask;
 }
 
-/// 读取virtual kitti语义分割图像， 像素值=trackID+1, 为0表示不是车(暂且认为是静态)
+
+
+///Read the virtual kitti semantic segmentation image.
+/// The pixel value=trackID+1. If it is 0, it means it is not a car (temporarily considered static)
 cv::Mat Frame::ReadVirtualKittiSegmentationImage(const string &strFolder, const int &nFrameId)
 {
     char frame_index_c[256];
@@ -1673,7 +1529,7 @@ cv::Ptr<cv::Tracker> createTrackerByName(string trackerType)
 void Frame::Online2DObjectTracking(cv::MultiTracker* multiTracker, vector<cv::Ptr<cv::Tracker>> vTrackers, vector<DetectionObject*>& vDetectionObjects)
 {
     cv::Mat frame;
-    if(mnId == 0) // 如果是该目标出现的第一帧,  这个条件需要变化
+    if(mnId == 0) // First frame
     {
         frame = mRawImg;
 
@@ -1685,9 +1541,9 @@ void Frame::Online2DObjectTracking(cv::MultiTracker* multiTracker, vector<cv::Pt
             EbStartViewerWith2DTracking = true;
 
 
-        if(bboxes.size() < 1) // bboxes,  决定了跟踪目标的数量
+        if(bboxes.size() < 1)
         {
-            cout<<"没有需要跟踪的目标!!"<<endl;
+            cout<<"There is no tracking object!"<<endl;
             assert(0);
         }
         string trackerType = "CSRT";// {"BOOSTING", "MIL", "KCF", "TLD", "MEDIANFLOW", "GOTURN", "MOSSE", "CSRT"};
@@ -1702,7 +1558,7 @@ void Frame::Online2DObjectTracking(cv::MultiTracker* multiTracker, vector<cv::Pt
             vDetectionObjects.push_back(raw_cuboid);
         }
     }
-    else{ // 后续帧
+    else{
         frame =mRawImg;
         multiTracker->update(frame);
         for(unsigned i=0; i< multiTracker->getObjects().size(); i++)
@@ -1720,29 +1576,28 @@ void Frame::Online2DObjectTracking(cv::MultiTracker* multiTracker, vector<cv::Pt
 void Frame::OfflineDetectObject(vector<DetectionObject*>& vDetectionObjects)
 {
     vDetectionObjects.clear();
-    /// 1. 判断是否读入了离线object检测文件
+
     if(EvOfflineAllObjectDetections.size() == 0)
     {
-        cout<<"未读取object跟踪预处理信息！"<<endl;
+        cout<<"Object tracking preprocessing information was not read!"<<endl;
         exit(0);
     }
-    /// 2. 读取该帧图像的object离线信息到pred_frame_objects
+
     std::vector<Eigen::Matrix<double, 1, 24>> pred_frame_objects;
-    pred_frame_objects = EvOfflineAllObjectDetections[ORB_SLAM2::EnStartFrameId];//读这张图像的objects,
-    /// 3. 将该帧obejct信息存入cuboids_on_frame
+    pred_frame_objects = EvOfflineAllObjectDetections[ORB_SLAM2::EnStartFrameId];
+
     vDetectionObjects.reserve(pred_frame_objects.size());
     for (size_t i = 0; i < pred_frame_objects.size(); i++)
     {
-        // 这是我的object的id, 仅仅读这张图像中的一个object
         //Eigen::Matrix<double, 1, 24> One_object_temp;
         auto One_object_temp = pred_frame_objects[i];
-        int type_id_temp = int(One_object_temp [17]); // 1是车
+        int type_id_temp = int(One_object_temp [17]);
         int truth_id = int(One_object_temp[1]);
 
 
         switch(EnSLOTMode)
         {
-            case 3: // 若是自动驾驶模式 就直接建立所有的目标
+            case 3:
             {
                 if(type_id_temp == 1)
                 {
@@ -1752,9 +1607,9 @@ void Frame::OfflineDetectObject(vector<DetectionObject*>& vDetectionObjects)
                 break;
             }
 
-            case 2: // 目标跟踪模式
+            case 2:
             {
-                if(truth_id == ORB_SLAM2::EnSelectTrackedObjId)// 设定跟踪目标的id
+                if(truth_id == ORB_SLAM2::EnSelectTrackedObjId)
                 {
                     DetectionObject *raw_cuboid = new DetectionObject(mnId, One_object_temp);
                     vDetectionObjects.push_back(raw_cuboid);
@@ -1762,7 +1617,7 @@ void Frame::OfflineDetectObject(vector<DetectionObject*>& vDetectionObjects)
                 break;
             }
 
-            case 4: //终极算法测试模式
+            case 4:
             {
                 if(type_id_temp == 1)
                 //if(truth_id == ORB_SLAM2::EnSelectTrackedObjId && type_id_temp == 1)
@@ -1784,7 +1639,7 @@ void Frame::AssignFeaturesToGrid()
     int nReserve = 0.5f*N/(FRAME_GRID_COLS*FRAME_GRID_ROWS);
     for(unsigned int i=0; i<FRAME_GRID_COLS;i++)
         for (unsigned int j=0; j<FRAME_GRID_ROWS;j++) {
-            //初始化，便于执行多次Assign
+
             mGrid[i][j].clear();
             mGrid[i][j].reserve(nReserve);
         }
@@ -1827,15 +1682,7 @@ void Frame::UpdatePoseMatrices()
     mRwc.copyTo(mTwc.rowRange(0, 3).colRange(0, 3));
     mOw.copyTo(mTwc.rowRange(0, 3).col(3));
 }
-/**
- * @brief 判断一个点是否在视野内
- *
- * 计算了重投影坐标，观测方向夹角，预测在当前帧的尺度
- * @param  pMP             MapPoint
- * @param  viewingCosLimit 视角和平均视角的方向阈值
- * @return                 true if is in view
- * @see SearchLocalPoints()
- */
+
 bool Frame::isInFrustum(MapPoint *pMP, float viewingCosLimit)
 {
     pMP->mbTrackInView = false;
@@ -1844,7 +1691,7 @@ bool Frame::isInFrustum(MapPoint *pMP, float viewingCosLimit)
     cv::Mat P = pMP->GetWorldPos();
 
     // 3D in camera coordinates
-    // 3D点P在相机坐标系下的坐标
+
     const cv::Mat Pc = mRcw*P+mtcw;
     const float &PcX = Pc.at<float>(0);
     const float &PcY= Pc.at<float>(1);
@@ -1955,7 +1802,7 @@ bool Frame::isInBBox(const size_t &nOrder, const float &u, const float &v)
     double minY = pDet->mrectBBox.y;
     double maxX = minX + pDet->mrectBBox.width;
     double maxY = minY + pDet->mrectBBox.height;
-    return (u>=minX && u<maxX && v>=minY && v<maxY); // 返回的是uv处于2D bbox中
+    return (u>=minX && u<maxX && v>=minY && v<maxY);
 }
 
 vector<size_t> Frame::GetFeaturesInArea(const float &x, const float  &y, const float  &r, const int minLevel, const int maxLevel) const
@@ -2044,30 +1891,19 @@ void Frame::AssignDetObjFeasToGrid(const size_t &objOrder, const size_t &objFeaN
 
 vector<size_t> Frame::GetObjectFeaturesInArea(const int& nDetObjOrder, const size_t& nDetObjFeaNum, const float &x, const float  &y, const float  &r, const int minLevel, const int maxLevel) const
 {
-    // 存储搜索结果的vector
     vector<size_t> vIndices;
     vIndices.reserve(nDetObjFeaNum);
 
-    // Step 1 计算半径为r圆左右上下边界所在的网格列和行的id
-    // 查找半径为r的圆左侧边界所在网格列坐标。这个地方有点绕，慢慢理解下：
-    // (mnMaxX-mnMinX)/FRAME_GRID_COLS：表示列方向每个网格可以平均分得几个像素（肯定大于1）
-    // mfGridElementWidthInv=FRAME_GRID_COLS/(mnMaxX-mnMinX) 是上面倒数，表示每个像素可以均分几个网格列（肯定小于1）
-    // (x-mnMinX-r)，可以看做是从图像的左边界mnMinX到半径r的圆的左边界区域占的像素列数
-    // 两者相乘，就是求出那个半径为r的圆的左侧边界在哪个网格列中
-    // 保证nMinCellX 结果大于等于0
     const int nMinCellX = max(0,(int)floor((x-mnMinX-r)*mfGridElementWidthInv));
 
-    // 如果最终求得的圆的左边界所在的网格列超过了设定了上限，那么就说明计算出错，找不到符合要求的特征点，返回空vector
     if(nMinCellX>=FRAME_GRID_COLS)
         return vIndices;
 
-    // 计算圆所在的右边界网格列索引
     const int nMaxCellX = min((int)FRAME_GRID_COLS-1,(int)ceil((x-mnMinX+r)*mfGridElementWidthInv));
-    // 如果计算出的圆右边界所在的网格不合法，说明该特征点不好，直接返回空vector
+
     if(nMaxCellX<0)
         return vIndices;
 
-    //后面的操作也都是类似的，计算出这个圆上下边界所在的网格行的id
     const int nMinCellY = max(0,(int)floor((y-mnMinY-r)*mfGridElementHeightInv));
     if(nMinCellY>=FRAME_GRID_ROWS)
         return vIndices;
@@ -2076,18 +1912,14 @@ vector<size_t> Frame::GetObjectFeaturesInArea(const int& nDetObjOrder, const siz
     if(nMaxCellY<0)
         return vIndices;
 
-    // 检查需要搜索的图像金字塔层数范围是否符合要求
-    //? 疑似bug。(minLevel>0) 后面条件 (maxLevel>=0)肯定成立
-    //? 改为 const bool bCheckLevels = (minLevel>=0) || (maxLevel>=0);
+
     const bool bCheckLevels = (minLevel>0) || (maxLevel>=0);
 
-    // Step 2 遍历圆形区域内的所有网格，寻找满足条件的候选特征点，并将其index放到输出里
     for(int ix = nMinCellX; ix<=nMaxCellX; ix++)
     {
 
         for(int iy = nMinCellY; iy<=nMaxCellY; iy++)
         {
-            // 获取这个网格内的所有特征点在 Frame::mvKeysUn 中的索引
             const vector<size_t> vCell = mvObjKeysGrid[nDetObjOrder][ix][iy];
             if(vCell.empty())
                 continue;
@@ -2095,13 +1927,10 @@ vector<size_t> Frame::GetObjectFeaturesInArea(const int& nDetObjOrder, const siz
 
             for(size_t j=0, jend=vCell.size(); j<jend; j++)
             {
-                // 根据索引先读取这个特征点
                 const cv::KeyPoint &kpUn = mvObjKeysUn[nDetObjOrder][vCell[j]];
 
                 if(bCheckLevels)
                 {
-                    // cv::KeyPoint::octave中表示的是从金字塔的哪一层提取的数据
-                    // 保证特征点是在金字塔层级minLevel和maxLevel之间，不是的话跳过
                     if(kpUn.octave<minLevel)
                         continue;
                     if(maxLevel>=0)
@@ -2109,11 +1938,9 @@ vector<size_t> Frame::GetObjectFeaturesInArea(const int& nDetObjOrder, const siz
                             continue;
                 }
 
-                // 通过检查，计算候选特征点到圆中心的距离，查看是否是在这个圆形区域之内
                 const float distx = kpUn.pt.x-x;
                 const float disty = kpUn.pt.y-y;
 
-                // 如果x方向和y方向的距离都在指定的半径之内，存储其index为候选特征点
                 if(fabs(distx)<r && fabs(disty)<r)
                     vIndices.push_back(vCell[j]);
             }
@@ -2124,55 +1951,45 @@ vector<size_t> Frame::GetObjectFeaturesInArea(const int& nDetObjOrder, const siz
 }
 
 
-//TODO define by yuzhen
-// vIndices表示离(x,y)在半径r区域内,与(x,y)距离最近的orb特征点.这个小圆圈占领了一些小方格,在这些小格子里面找离(x,y)最近的特征点.
-// 为啥不直接找(x,y)周围的九个格子.要选个半仅多此一举!!!, 此半径与尺度有关
-/// 找到在 以x,y为中心,半径为r的圆形内且金字塔层级在[minLevel, maxLevel]的特征点在mvkeysdynamic中的序号
 int Frame::GetCloestFeaturesInArea(const int& nDetObjOrder, const float &x, const float &y, const float &r, const int minLevel, const int maxLevel) const
 {
-    /// 1. 初始化
     int vIndices = -1;
 
-    /// 解释： mfGridElementWidthInv = FRAME_GRID_COLS/(mnMaxX-mnMinX)，表示每个像素可以均分几个网格列（肯定小于1）
-    /// (x - mnMinX - r) * mfGridElementWidthInv) 求出那个半径为r的圆的左侧边界在哪个网格列中
     const int nMinCellX = max(0, (int)floor((x - mnMinX - r) * mfGridElementWidthInv));
-    /// 如果最终求得的圆的左边界所在的网格列超过了设定了上限，那么就说明计算出错，找不到符合要求的特征点
     if (nMinCellX >= FRAME_GRID_COLS)
         return vIndices;
 
-    // 计算圆所在的右边界网格列索引
     const int nMaxCellX = min((int)FRAME_GRID_COLS - 1, (int)ceil((x - mnMinX + r) * mfGridElementWidthInv));
-    // 如果计算出的圆右边界所在的网格不合法，说明该特征点不好
+
     if (nMaxCellX < 0)
         return vIndices;
 
-    // 上边界
+
     const int nMinCellY = max(0, (int)floor((y - mnMinY - r) * mfGridElementHeightInv));
     if (nMinCellY >= FRAME_GRID_ROWS)
         return vIndices;
 
-    // 下边界
+
     const int nMaxCellY = min((int)FRAME_GRID_ROWS - 1, (int)ceil((y - mnMinY + r) * mfGridElementHeightInv));
     if (nMaxCellY < 0)
         return vIndices;
 
     const bool bCheckLevels = (minLevel > 0) || (maxLevel >= 0);
     float min_dist = -1;
-    // Step 2 遍历圆形区域内的所有网格，寻找满足条件的候选特征点，并将其index放到输出里
+
     for (int ix = nMinCellX; ix <= nMaxCellX; ix++)
     {
         for (int iy = nMinCellY; iy <= nMaxCellY; iy++)
         {
-            // 若该网格没有特征点，则跳过
             const vector<size_t> vCell = mvObjKeysGrid[nDetObjOrder][ix][iy];
             if (vCell.empty())
                 continue;
-            // 遍历该网格内的特征点
+
             for (size_t j = 0, jend = vCell.size(); j < jend; j++)
             {
-                // 读取
+
                 const cv::KeyPoint &kpUn = mvObjKeysUn[nDetObjOrder][vCell[j]];
-                // 保证给定的搜索金字塔层级范围合法
+
                 if (bCheckLevels)
                 {
                     if (kpUn.octave < minLevel)
@@ -2182,15 +1999,15 @@ int Frame::GetCloestFeaturesInArea(const int& nDetObjOrder, const float &x, cons
                             continue;
                 }
 
-                // 通过检查，计算候选特征点到圆中心的距离，查看是否是在这个圆形区域之内
+
                 const float distx = kpUn.pt.x - x;
                 const float disty = kpUn.pt.y - y;
 
-                // 如果x方向和y方向的距离都在指定的半径之内，存储其index为候选特征点
+
                 if (fabs(distx) < r && fabs(disty) < r)
                 {
                     float dist = distx * distx + disty * disty;
-                    // 如果阈值为-1 或者 阈值小于当前距离， 意思就是找出最短距离的特征点
+
                     if (min_dist == -1 || dist < min_dist)
                     {
                         min_dist = dist;
@@ -2515,7 +2332,6 @@ void Frame::ComputeObjStereoMatches()
 
         vuObjRight = vector<float>(vObjKeys.size(),-1.0f);
         vObjDepth = vector<float>(vObjKeys.size(),-1.0f);
-        // 步骤1：建立特征点搜索范围对应表，一个特征点在一个带状区域内搜索匹配特征点
         vector<vector<size_t> > vRowIndices(nRows,vector<size_t>());
         for(int i=0; i<nRows; i++)
             vRowIndices[i].reserve(200);
@@ -2526,9 +2342,7 @@ void Frame::ComputeObjStereoMatches()
         {
             const cv::KeyPoint &kp = vObjKeysRight[iR];
             const float &kpY = kp.pt.y;
-            // 计算匹配搜索的纵向宽度，尺度越大（层数越高，距离越近），搜索范围越大
-            // 如果特征点在金字塔第一层，则搜索范围为:正负2
-            // 尺度越大其位置不确定性越高，所以其搜索半径越大
+
             const float r = 2.0f*mvScaleFactors[vObjKeysRight[iR].octave];
             const int maxr = ceil(kpY+r);
             const int minr = floor(kpY-r);
@@ -2537,17 +2351,14 @@ void Frame::ComputeObjStereoMatches()
                 vRowIndices[yi].push_back(iR);
         }
 
-        const float minZ = mb; //mb初始化在此函数的后面，bug?mb先初始化后，直接lost了，说明这个参数太严格
-        const float minD = 0;//最小视差
-        const float maxD = mbf/minZ;//最大视差，mbf/minz=mbf/mb=mbf/mbf/fx=fx，即最小深度
+        const float minZ = mb;
+        const float minD = 0;
+        const float maxD = mbf/minZ;
 
         // For each left keypoint search a match in the right image
         vector<pair<int, int> > vDistIdx;
         vDistIdx.reserve(vObjKeys.size());
-        // 步骤2：对左目相机每个特征点，通过描述子在右目带状搜索区域找到匹配点, 再通过SAD做亚像素匹配
-        // 注意：这里是校正前的mvKeys，而不是校正后的mvKeysUn
-        // KeyFrame::UnprojectStereo和Frame::UnprojectStereo函数中不一致
-        // 这里是不是应该对校正后特征点求深度呢？
+
         for(int iL=0; iL<int(vObjKeys.size()); iL++)
         {
             const cv::KeyPoint &kpL = vObjKeys[iL];
@@ -2560,8 +2371,8 @@ void Frame::ComputeObjStereoMatches()
             if(vCandidates.empty())
                 continue;
 
-            const float minU = uL-maxD; //最小匹配范围
-            const float maxU = uL-minD; //最大匹配范围，这里是不是可以改成+maxD？
+            const float minU = uL-maxD;
+            const float maxU = uL-minD;
 
             if(maxU<0)
                 continue;
@@ -2569,16 +2380,14 @@ void Frame::ComputeObjStereoMatches()
             int bestDist = ORBmatcher::TH_HIGH;
             size_t bestIdxR = 0;
 
-            // 每个特征点描述子占一行，建立一个指针指向iL特征点对应的描述子
             const cv::Mat &dL = vObjDescriptors.row(iL);
             // Compare descriptor to right keypoints
-            // 步骤2.1：遍历右目所有可能的匹配点，找出最佳匹配点（描述子距离最小）
+
             for(size_t iC=0; iC<vCandidates.size(); iC++)
             {
                 const size_t iR = vCandidates[iC];
                 const cv::KeyPoint &kpR = vObjKeysRight[iR];
 
-                // 仅对近邻尺度的特征点进行匹配
                 if(kpR.octave<levelL-1 || kpR.octave>levelL+1)
                     continue;
 
@@ -2596,13 +2405,11 @@ void Frame::ComputeObjStereoMatches()
                     }
                 }
             }
-            // 步骤2.2：通过SAD匹配提高像素匹配修正量bestincR
             // Subpixel match by correlation
             if(bestDist<thOrbDist)
             {
                 // coordinates in image pyramid at keypoint scale
-                // kpL.pt.x对应金字塔最底层坐标，将最佳匹配的特征点对
-                //尺度变换到尺度对应层 (scaleduL, scaledvL) (scaleduR0, )
+
                 const float uR0 = vObjKeysRight[bestIdxR].pt.x;
                 const float scaleFactor = mvInvScaleFactors[kpL.octave];
                 const float scaleduL = round(kpL.pt.x*scaleFactor);
@@ -2610,11 +2417,11 @@ void Frame::ComputeObjStereoMatches()
                 const float scaleduR0 = round(uR0*scaleFactor);
 
                 // sliding window search
-                const int w = 5;// 滑动窗口的大小11*11 注意该窗口取自resize后的图像
-                //可能会有bug
+                const int w = 5;
+
                 cv::Mat IL = mpORBextractorLeft->mvImagePyramid[kpL.octave].rowRange(scaledvL-w,scaledvL+w+1).colRange(scaleduL-w,scaleduL+w+1);
                 IL.convertTo(IL,CV_32F);
-                //窗口中的每个元素减去正中心的那个元素，简单归一化，减小光照强度影响
+
                 IL = IL - IL.at<float>(w,w) *cv::Mat::ones(IL.rows,IL.cols,CV_32F);
 
                 int bestDist = INT_MAX;
@@ -2622,75 +2429,51 @@ void Frame::ComputeObjStereoMatches()
                 const int L = 5;
                 vector<float> vDists;
                 vDists.resize(2*L+1);
-                // 滑动窗口的滑动范围为（-L, L）,提前判断滑动窗口滑动过程中是否会越界
+
                 const float iniu = scaleduR0+L-w;
                 const float endu = scaleduR0+L+w+1;
                 if(iniu<0 || endu >= mpORBextractorRight->mvImagePyramid[kpL.octave].cols)
                 {
                     continue;
                 }
-                //左目待匹配特征点一个滑窗，右目bestmatch特征点一个滑窗
+
                 for(int incR=-L; incR<=+L; incR++)
                 {
                     cv::Mat IR = mpORBextractorRight->mvImagePyramid[kpL.octave].rowRange(scaledvL-w,scaledvL+w+1).colRange(scaleduR0+incR-w,scaleduR0+incR+w+1);
                     IR.convertTo(IR,CV_32F);
                     IR = IR - IR.at<float>(w,w) *cv::Mat::ones(IR.rows,IR.cols,CV_32F);
 
-                    float dist = cv::norm(IL,IR,cv::NORM_L1);// 一范数，计算差的绝对值
+                    float dist = cv::norm(IL,IR,cv::NORM_L1);
                     if(dist<bestDist)
                     {
-                        bestDist =  dist;// SAD匹配目前最小匹配偏差
-                        bestincR = incR;// SAD匹配目前最佳的修正量
+                        bestDist =  dist;
+                        bestincR = incR;
                     }
 
-                    vDists[L+incR] = dist;// 正常情况下，这里面的数据应该以抛物线形式变化
+                    vDists[L+incR] = dist;
                 }
-                // 整个滑动窗口过程中，SAD最小值不是以抛物线形式出现，
-                //SAD匹配失败，同时放弃求该特征点的深度
+
                 if(bestincR==-L || bestincR==L)
                 {
                     continue;
                 }
-                // 步骤2.3：做抛物线拟合找谷底得到亚像素匹配deltaR
-                // (bestincR,dist) (bestincR-1,dist) (bestincR+1,dist)三个点拟合出抛物线
-                // bestincR+deltaR就是抛物线谷底的位置，相对SAD匹配出的最小值bestincR的修正量为deltaR
-                // Sub-pixel match (Parabola fitting)
+
                 const float dist1 = vDists[L+bestincR-1];
                 const float dist2 = vDists[L+bestincR];
                 const float dist3 = vDists[L+bestincR+1];
 
                 const float deltaR = (dist1-dist3)/(2.0f*(dist1+dist3-2.0f*dist2));
 
-                // 抛物线拟合得到的修正量不能超过一个像素，否则放弃求该特征点的深度
                 if(deltaR<-1 || deltaR>1)
                 {
-//                    float bestuR = mvScaleFactors[kpL.octave]*((float)scaleduR0+(float)bestincR);
-//                    // 这里是disparity，根据它算出depth
-//                    float disparity = (uL-bestuR);
-//                    if(disparity>=minD && disparity<maxD)// 最后判断视差是否在范围内
-//                    {
-//                        if(disparity<=0)
-//                        {
-//                            disparity=0.01;
-//                            bestuR = uL-0.01;
-//                        }
-//                        vObjDepth[iL]=mbf/disparity;
-//                        vuObjRight[iL] = bestuR;
-//                        vDistIdx.push_back(pair<int,int>(bestDist,iL));
-//                        continue;
-//                    }
                     continue;
                 }
                 // Re-scaled coordinate
-                // 通过描述子匹配得到匹配点位置为scaleduR0
-                // 通过SAD匹配找到修正量bestincR
-                // 通过抛物线拟合找到亚像素修正量deltaR
                 float bestuR = mvScaleFactors[kpL.octave]*((float)scaleduR0+(float)bestincR+deltaR);
 
-                // 这里是disparity，根据它算出depth
                 float disparity = (uL-bestuR);
 
-                if(disparity>=minD && disparity<maxD)// 最后判断视差是否在范围内
+                if(disparity>=minD && disparity<maxD)
                 {
                     if(disparity<=0)
                     {
@@ -2761,7 +2544,7 @@ cv::Mat Frame::UnprojectStereodynamic(const size_t& nDetObjOrder, const int &i, 
 }
 
 void Frame::DetectYOLO(cv::Mat &imColor, vector<DetectionObject *> &vDetectionObjects,Detector* YOLODetector, DS::DeepSort* deepSort, cv::Mat left, cv::Mat right) {
-    // 用到的是yolo + sort 输出是detection objects
+
     auto t1 = std::chrono::steady_clock::now();
 
     std::vector<std::vector<Detection>> result = YOLODetector->Run(imColor, EfConfThres, EfIouThres);
@@ -2783,9 +2566,9 @@ void Frame::DetectYOLO(cv::Mat &imColor, vector<DetectionObject *> &vDetectionOb
     deepSort->sort(imColor, det);
     for(auto &temp: det) // 得到vDetectionObjects
     {
-        // 起点有可能是负数， 或者是终点超过了图像的范围
+
         DS::DetectBox temp1 = temp;
-        // 防止temp超出图像范围，需要对temp进行修改
+        //To prevent the temp from exceeding the image range, the temp needs to be modified
         temp.x1 = max(float(0), temp1.x1);
         temp.y1 = max(float(0), temp1.y1);
         temp.x2 = min(float(mRawImg.cols-1), temp1.x2);
@@ -2793,29 +2576,26 @@ void Frame::DetectYOLO(cv::Mat &imColor, vector<DetectionObject *> &vDetectionOb
 
 
         cv::Rect bbox(temp.x1, temp.y1, temp.x2- temp.x1, temp.y2-temp.y1);
-//        if (bbox.height<40)
-//            continue;
         bool initflag=0;
         Eigen::Vector3d scale = EeigUniformObjScale;
-        Eigen::Vector3d initPosition = Eigen::Vector3d::Zero(); // 如果有3d检测比较好
+        Eigen::Vector3d initPosition = Eigen::Vector3d::Zero();
         Eigen::Vector3d initRotation = Eigen::Vector3d::Zero();
 
         if(1)
         OfflineObjectPoseInit(bbox,&initPosition,&initRotation,&scale);
         if(initPosition[0]!=0) initflag=1;
-        //cout<<pinitPosition->transpose()<<" ";
         DetectionObject *raw_cuboid = new DetectionObject(mnId, temp.trackID, bbox, scale, initPosition, initRotation);
         raw_cuboid->mInitflag = initflag;
         vDetectionObjects.push_back(raw_cuboid);
     }
     cout<<endl;
 
-    // 产生一个mask用做特征分配
+
 
     int th1 = 5, th2 = 5, th3 = 5, th4 = 5;
-    for(size_t i=0; i < vDetectionObjects.size(); i++) // 向内缩进得到目标的id
+    for(size_t i=0; i < vDetectionObjects.size(); i++)
     {
-        cv::Rect tmp = vDetectionObjects[i]->mrectBBox; // 如果有遮挡的话就有问题
+        cv::Rect tmp = vDetectionObjects[i]->mrectBBox;
         if (tmp.width<th3+th1 || tmp.height<th2+th4){
             vDetectionObjects[i] =  static_cast<DetectionObject*>(NULL);
             continue;
@@ -2905,16 +2685,16 @@ void Frame::OfflineObjectPoseInit(cv::Rect YOLODet, Eigen::Vector3d *initPositio
 
     if(EvOfflineAllObjectDetections.empty())
     {
-        cout<<"未读取object跟踪预处理信息！"<<endl;
+        cout<<"Object tracking preprocessing information was not read!"<<endl;
         exit(0);
     }
-    /// 2. 读取该帧图像的object离线信息到pred_frame_objects
+
     std::vector<Eigen::Matrix<double, 1, 24>> pred_frame_objects;
-    pred_frame_objects = EvOfflineAllObjectDetections[ORB_SLAM2::EnStartFrameId];//读这张图像的objects
+    pred_frame_objects = EvOfflineAllObjectDetections[ORB_SLAM2::EnStartFrameId];
     float best_iou = 0;
     Eigen::Matrix<double,1,24> best_obj;
     for (auto obj:pred_frame_objects) {
-        if (obj[17]!=1) continue;//不是车就continue
+        if (obj[17]!=1) continue;
         cv::Rect offlineBox = cv::Rect(obj[5], obj[6], obj[7], obj[8]);
         float iou = bbox_IoU(YOLODet,offlineBox);
         cout<<iou<<" ";
