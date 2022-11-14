@@ -1,5 +1,5 @@
 # PointSLOT
-Comming soon.
+This project is the source code of simultaneous localization and object tracking.
 # Install
 Comming soon.
 # Run

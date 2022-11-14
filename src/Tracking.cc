@@ -1921,6 +1921,10 @@ void Tracking::MapObjectInit(const int &i)
     DetectionObject* candidate_cuboid = mCurrentFrame.mvDetectionObjects[i];
     g2o::ObjectState gt = candidate_cuboid->mTruthPosInCameraFrame;
     g2o::ObjectState InitPose = candidate_cuboid->mTruthPosInCameraFrame;
+
+    // initialize the object pose
+    InitPose.setRotation(Eigen::Vector3d(0,0,0));
+    InitPose.setScale(ORB_SLAM2::EeigUniformObjScale);
     int nNum = 0; // 三角化目标点
     vector<pair<Eigen::Vector3d, int>> Pcjs;
     Pcjs.reserve(mCurrentFrame.mvObjKeysUn[i].size());
@@ -2039,6 +2043,10 @@ void Tracking::MapObjectReInit(const int &order)
     MapObject* pMO = mCurrentFrame.mvMapObjects[order];
     DetectionObject* pDet = mCurrentFrame.mvDetectionObjects[order];
     g2o::ObjectState InitPose = pDet->mTruthPosInCameraFrame;
+
+    // initialize the object pose
+    InitPose.setRotation(Eigen::Vector3d(0,0,0));
+    InitPose.setScale(ORB_SLAM2::EeigUniformObjScale);
     pMO->ClearMapObjectPoint();
 
     {
@@ -2996,7 +3004,6 @@ void Tracking::CreateNewObjectKeyFrame(const size_t &nOrder)
     if(EnSLOTMode == 2 || EnSLOTMode ==3 ||EnSLOTMode == 4) // 只有目标跟踪模式才插到局部建图线程去
     {
         mpObjectLocalMapper->InsertOneObjKeyFrame(pOKF);
-        //mpObjectLocalMapper->InsertKeyFrame(moObjectTmp->mnTruthID, pOKF); // 将当前关键帧插入mlNewKeyFrames队列
     }
 
     moObjectTmp->mnLastKeyFrameId = mCurrentFrame.mnId;
