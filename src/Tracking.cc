@@ -282,7 +282,7 @@ Tracking::Tracking(System *pSys, ORBVocabulary* pVoc, FrameDrawer *pFrameDrawer,
             assert(0);
     }
 
-    cout<<"离线目标信息或相机位姿读取完毕"<<endl;
+    cout<<"offline object information and camera parameters are read."<<endl;
 
 
     float fx = fSettings["Camera.fx"];
@@ -442,7 +442,7 @@ void Tracking::YoloInit(const cv::FileStorage &fSettings)
     EvClassNames = LoadNames("/home/zpk/SLOT/ORB_SLAM2/weights/coco.names");
     if(EvClassNames.empty())
     {
-        cout<<"YOLO没有class文件!"<<endl;
+        cout<<"There is no class file of YOLO!"<<endl;
         assert(0);
     }
     EfConfThres = fSettings["Yolo.confThres"]; // 阈值
@@ -656,7 +656,7 @@ void Tracking::ReadKittiObjectInfo(const std::string &inputfile)
     // 如果此时的object size不等于frame_waibu_id， 那说明有问题， 举例: id为12,那么目前的object从0-11都有
     if(int(all_object_temp.size())!=frame_waibu_id) // 此时的frame_waibu_id 与 frame_id相同
     {
-        cout<<"读取kitti离线目标信息错误！！！"<<endl;
+        cout<<"Error reading offline object pose information！！！"<<endl;
         exit(0);
     }
 
@@ -851,7 +851,7 @@ void Tracking::ReadVirtualKittiObjectInfo(const std::string &objectposefile, con
                 ssbbox>>is_moving;
                 if(objects_inoneframe_temp.size()==0)
                 {
-                    cout<<"读取错误"<<endl;
+                    cout<<"reading error"<<endl;
                     exit(0);
                 }
                 else{
@@ -872,7 +872,7 @@ void Tracking::ReadVirtualKittiObjectInfo(const std::string &objectposefile, con
 
     if(int(all_object_temp.size())!=frame_waibu_id)
     {
-        cout<<"读取kitti离线目标信息错误！！！"<<endl;
+        cout<<"Error reading offline object pose information！！！"<<endl;
         exit(0);
     }
 
@@ -894,7 +894,6 @@ void Tracking::ReadVirtualKittiObjectInfo(const std::string &objectposefile, con
         }
     }
 
-    cout<<"读取离线objects结束"<<endl;
 
     EvOfflineAllObjectDetections = all_object_temp;
 
@@ -949,7 +948,6 @@ void Tracking::ReadVirtualKittiCameraGT(const std::string &cameraposefile)
     }
 
 
-    cout<<"相机位姿读取完毕！"<<endl;
 }
 
 
@@ -1028,11 +1026,11 @@ void Tracking::ReadMynteyeObjectInfo(const std::string &objInfo)
         EvOfflineAllObjectDetections.push_back(objects_inoneframe_temp);
     }
 
-    if(EvOfflineAllObjectDetections.size() != EnImgTotalNum)
-    {
-        cout<<"目标信息个数与图像数量不相等!!"<<endl;
-        //assert(0);
-    }
+//    if(EvOfflineAllObjectDetections.size() != EnImgTotalNum)
+//    {
+//        cout<<"目标信息个数与图像数量不相等!!"<<endl;
+//        //assert(0);
+//    }
 }
 
 std::vector<std::string> Tracking::LoadNames(const std::string& path)
@@ -1522,7 +1520,7 @@ void Tracking::Track()
                     DetectionObject* pDet = mCurrentFrame.mvDetectionObjects[i];
                     MapObject* pMO = mCurrentFrame.mvMapObjects[i];
                     if(pDet==NULL||pMO==NULL)
-                        assert(0);
+                        continue;
                     if(pMO->mnFirstObservationFrameId == mCurrentFrame.mnId)
                         continue;
 
@@ -1554,7 +1552,7 @@ void Tracking::Track()
                         }
                     }
                     else{
-                        cout<<RED<<"Object "<<pDet->mnObjectID<<" tracking fails!"<<WHITE<<endl;
+                        //cout<<RED<<"Object "<<pDet->mnObjectID<<" tracking fails!"<<WHITE<<endl;
                         MapObjectReInit(i);
                     }
                 }
@@ -1704,7 +1702,7 @@ bool Tracking::TrackMapObject()
                 }
                 else{
                     candidate_cuboid->SetDynamicFlag(object_temp->GetDynamicFlag()) ;
-                    cout<<"目标: "<<candidate_cuboid->mnObjectID<<"  成功跟踪, 但目标不在上一帧, 动态性： " <<candidate_cuboid->GetDynamicFlag()<<endl;
+                    //cout<<"Object: "<<candidate_cuboid->mnObjectID<<"  successfully tracked, but not in the last frame, dynamics： " <<candidate_cuboid->GetDynamicFlag()<<endl;
                 }
                 mCurrentFrame.mvTotalTrackedObjOrders.push_back(i);
                 break;
@@ -1721,13 +1719,12 @@ bool Tracking::TrackMapObject()
     bool bFlag = mCurrentFrame.mvTotalTrackedObjOrders.size() ==0 && mCurrentFrame.mvnNewConstructedObjOrders.size() == 0;
     if(bFlag)
     {
-        cout<<"该帧未能跟踪(或建立)3D object"<<endl;
+        cout<<"This frame does not track or construct any object."<<endl;
     }
     return !bFlag;
 }
 
 bool Tracking::InitializeCurrentObjPose(const int &i, g2o::ObjectState &Pose) {
-    //TODO 加一步对准2D框的操作，进一步提高准确性
     //每帧initialize对准2D框，创建关键帧时考虑fit 3D框
     //另外 没点的物体tracking状态没有保持，修改一下(还是加上了Reinit)
     DetectionObject* candidate_cuboid = mCurrentFrame.mvDetectionObjects[i];
@@ -1923,8 +1920,8 @@ void Tracking::MapObjectInit(const int &i)
     g2o::ObjectState InitPose = candidate_cuboid->mTruthPosInCameraFrame;
 
     // initialize the object pose
-    InitPose.setRotation(Eigen::Vector3d(0,0,0));
-    InitPose.setScale(ORB_SLAM2::EeigUniformObjScale);
+    //InitPose.setRotation(Eigen::Vector3d(0,0,0));
+    //InitPose.setScale(ORB_SLAM2::EeigUniformObjScale);
     int nNum = 0; // 三角化目标点
     vector<pair<Eigen::Vector3d, int>> Pcjs;
     Pcjs.reserve(mCurrentFrame.mvObjKeysUn[i].size());
@@ -1980,13 +1977,13 @@ void Tracking::MapObjectInit(const int &i)
     eigObjPosition /= best_inlier_set.size();
 
     // Soft prior for car
-    if (eigObjPosition[2]>30 || eigObjPosition[2]<8)
+    if (eigObjPosition[2]<8)
         return;
 
     eigObjPosition[2] += 0.2*candidate_cuboid->mScale[0];
     eigObjPosition[1] = 0 + candidate_cuboid->mScale[1]/2;
 
-    cout<<"目标"<<candidate_cuboid->mnObjectID<<"初始位置: "<<eigObjPosition.transpose()<<endl;
+    cout<<"Object: "<<candidate_cuboid->mnObjectID<<" initposition: "<<eigObjPosition.transpose()<<endl;
 
     //if(EbSetInitPositionByPoints && best_inlier_set.size() > 0)
     // Fine Tuning
@@ -2031,7 +2028,7 @@ void Tracking::MapObjectInit(const int &i)
     }
 
     // 需不需要根据这个点数多少说明目标不行
-    cout<<"目标: "<<candidate_cuboid->mnObjectID<<"  成功建立 "<<" 三角化建立目标点数: "<<nReal<<endl;
+    cout<<"Object: "<<candidate_cuboid->mnObjectID<<"  constructed successfully, "<<" features number: "<<nReal<<endl;
     cout<<endl;
     if(EnSLOTMode == 2 || EnSLOTMode == 3 || EnSLOTMode == 4)
         mpObjectLocalMapper->InsertOneObjKeyFrame(pKFini);
@@ -2045,8 +2042,8 @@ void Tracking::MapObjectReInit(const int &order)
     g2o::ObjectState InitPose = pDet->mTruthPosInCameraFrame;
 
     // initialize the object pose
-    InitPose.setRotation(Eigen::Vector3d(0,0,0));
-    InitPose.setScale(ORB_SLAM2::EeigUniformObjScale);
+//    InitPose.setRotation(Eigen::Vector3d(0,0,0));
+//    InitPose.setScale(ORB_SLAM2::EeigUniformObjScale);
     pMO->ClearMapObjectPoint();
 
     {
@@ -2139,7 +2136,7 @@ void Tracking::MapObjectReInit(const int &order)
             eigObjPosition+=Pcjs[q].first;
         }
         eigObjPosition /= best_inlier_set.size();
-        if (eigObjPosition[2]>30 || eigObjPosition[2]<8)
+        if (eigObjPosition[2]<8)
             return;
         // 2. 是否用目标点平均位置修正目标pose
         if (eigObjPosition[2]>8)
@@ -3133,7 +3130,7 @@ bool Tracking::TrackReferenceKeyFrame()
 {
     // Compute Bag of Words vector
     /// 1. 将当前帧的描述子转化为BoW向量
-    cout<<"进入TrackReferenceKeyFrame"<<endl;
+    cout<<"TrackReferenceKeyFrame"<<endl;
     mCurrentFrame.ComputeBoW();
 
     // We perform first an ORB matching with the reference keyframe
@@ -3144,7 +3141,7 @@ bool Tracking::TrackReferenceKeyFrame()
     /// 3. 静态点: 当前帧与参考关键帧静态特征点匹配, 匹配点存在vpMapPointMatches
     int nmatches = matcher.SearchByBoW(mpReferenceKF,mCurrentFrame,vpMapPointMatches);
 
-    cout<<"静态跟踪参考帧3D点数: "<<nmatches<<endl;
+    //cout<<"静态跟踪参考帧3D点数: "<<nmatches<<endl;
 
     /// 5. 如果静态点匹配数量小于15,则返回
     if(nmatches<15)

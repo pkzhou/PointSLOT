@@ -39,7 +39,7 @@ mnBALocalForKF(0), mnBAFixedForKF(0), mbFirstConnection(true),  mpParent(NULL), 
         mnObjId = 0;
         mNextObjKFId.insert(make_pair(mObjTrackId, 0 + 1));
     }
-    cout << YELLOW << "目标关键帧" << mObjTrackId << "  是否第一次创建: " << mbFirstObserved << " mnObjId: " << mnObjId << WHITE << endl;
+    cout << YELLOW << "Object Keyframe" << mObjTrackId << "  First created: " << mbFirstObserved << " mnObjId: " << mnObjId << WHITE << endl;
 
     mpMapObjects = pMO;
     mpDetectionObject = pDetObj;

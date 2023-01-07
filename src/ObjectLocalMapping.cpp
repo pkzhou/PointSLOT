@@ -70,7 +70,7 @@ void ObjectLocalMapping::ProcessNewObjectKeyFrame()
         unique_lock<mutex> lock(mMutexNewKFs);
         mpCurrentObjectKeyFrame = mlNewObjectKeyFrames.front(); // Tracking线程向LocalMapping中插入关键帧存在该队列中
         mlNewObjectKeyFrames.pop_front(); // 队列开头弹出
-        cout<<YELLOW<<"目标"<<mpCurrentObjectKeyFrame->mObjTrackId<<"  CurrentObjectKeyFrame被取出，队列中还剩"<<mlNewObjectKeyFrames.size()<<"帧!";
+        cout<<YELLOW<<"Object Keyframe"<<mpCurrentObjectKeyFrame->mObjTrackId<<"，queue leaves"<<mlNewObjectKeyFrames.size()<<"帧!";
         cout<<"------";
         for (auto pkf : mlNewObjectKeyFrames)
         {
