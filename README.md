@@ -1,7 +1,7 @@
 # PointSLOT
 This project is the source code of simultaneous localization and object tracking (SLOT) named PointSLOT.
 
-PointSLOT is an online, real-time and general system without any artificial priors. The system makes use of ORB features for static scene representation, ego-localization and object motion estimation. In particular, we explicitly identify moving and stationary objects by computing the object motion probabilities, such that features of static objects are utilized to improve the camera pose estimation instead of treating all object regions as outliers. Based on the camera-centric parameterization for the object pose, the trajectories and dynamic features of multi-keyframe objects are efficiently solved through an object-based bundle adjustment. approach.
+PointSLOT is an online, real-time and general system without any artificial priors. The system makes use of ORB features for static scene representation, ego-localization and object motion estimation. In particular, we explicitly identify moving and stationary objects by computing the object motion probabilities, such that features of static objects are utilized to improve the camera pose estimation instead of treating all object regions as outliers. Based on the camera-centric parameterization for the object pose, the trajectories and dynamic features of multi-keyframe objects are efficiently solved through an object-based bundle adjustment approach. The linke of the releted paper is [here](https://ieeexplore.ieee.org/abstract/document/10068732).
 
 ![image](https://user-images.githubusercontent.com/73513416/211151506-7ed54900-f0c4-40d5-b5e5-b742d0fdc313.png)
 
