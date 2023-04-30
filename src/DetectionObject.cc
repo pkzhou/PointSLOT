@@ -23,22 +23,21 @@ namespace ORB_SLAM2
             mbTrackOK(false), mbNeedCreateNewOKFFlag(false)
     {
         mnObjectID = eigDetection[1];
-        mdTruncated = eigDetection[2]; // 0 没有截断， 1 完全截断
-        mdOcculuded = eigDetection[3]; // 这个参数, kitti和virtual kitti不一样. kitti是0 1 2 3, 0是完全没有遮挡, virtual kitti是[0,1]的分数,代表没有遮挡的像素占总像素比例
+        mdTruncated = eigDetection[2];
+        mdOcculuded = eigDetection[3];
         mdAlpha = eigDetection[4];
         mrectBBox = cv::Rect(eigDetection[5], eigDetection[6], eigDetection[7], eigDetection[8]);
         //mBBox = Eigen::Vector4d(eigDetection[5]+eigDetection[7]/2, eigDetection[6]+eigDetection[8]/2, eigDetection[7], eigDetection[8]);
-        /// 存的是目标系下的xyz方向上的尺度： x length， y height z width
+        /// x length， y height z width
         mScale = Eigen::Vector3d (eigDetection[9], eigDetection[10], eigDetection[11]);
-        /// pos的意义，在camera坐标系, 注意kitti的camera坐标系定义z朝前， y朝下，x朝右（俯视图）
+        /// pos: in the camera coordinate system,
+        /// note that kitti's camera coordinate system defines z facing forward, y facing down, and x facing right (overhead view)
         mPos = Eigen::Vector3d(eigDetection[12], eigDetection[13], eigDetection[14]);
-        /// cameraz轴，和object z轴之间的夹角(object的z轴在右边为正？)， camera和object坐标系定义是一样的
         mdRotY = eigDetection[15];
         mdRotX = eigDetection[19]; // extend
         mdRotZ = eigDetection[19]; // extend
-        mdMeasQuality= 1; // 这个是我自己定义的，默认为1， 目前kitti和virtual kitti的线线数据都没有这个
+        mdMeasQuality= 1;
 
-        // 如果没有截断， 没有遮挡， 观测质量好，则为该观测质量高
         if(EnDataSetNameNum==0) //kitti
         {
             if(mdTruncated==0 && mdOcculuded == 0 && mdMeasQuality > 0.7)
@@ -61,7 +60,6 @@ namespace ORB_SLAM2
             }
         }
 
-        // 3D 检测的位姿
         Eigen::Matrix<double, 9, 1> cube_pose;
         cube_pose << mPos[0], mPos[1]-mScale[1]/2, mPos[2], mdRotZ, mdRotY, mdRotX, mScale[0], mScale[1], mScale[2];
 
@@ -78,23 +76,18 @@ namespace ORB_SLAM2
             mbTrackOK(false), mbNeedCreateNewOKFFlag(false)
     {
         mnObjectID = object_id;
-        mdTruncated = 0; // 0 没有截断， 1 完全截断
-        mdOcculuded = 0; // 这个参数, kitti和virtual kitti不一样. kitti是0 1 2 3, 0是完全没有遮挡, virtual kitti是[0,1]的分数,代表没有遮挡的像素占总像素比例
+        mdTruncated = 0;
+        mdOcculuded = 0;
         mdAlpha = 0;
         mrectBBox = BBox;
         TooFar = true;
-
-        /// 存的是目标系下的xyz方向上的尺度： x length， y height z width
         mScale = scale;
-        /// pos的意义，在camera坐标系, 注意kitti的camera坐标系定义z朝前， y朝下，x朝右（俯视图）
         mPos = position;
-        /// cameraz轴，和object z轴之间的夹角(object的z轴在右边为正？)， camera和object坐标系定义是一样的
         mdRotY = rotation[1];
         mdRotX = rotation[0]; // extend
         mdRotZ = rotation[2]; // extend
-        mdMeasQuality= 1; // 这个是我自己定义的，默认为1， 目前kitti和virtual kitti的线线数据都没有这个
+        mdMeasQuality= 1;
 
-        // 如果没有截断， 没有遮挡， 观测质量好，则为该观测质量高
         if(EnDataSetNameNum==0) //kitti
         {
             if(mdTruncated==0 && mdOcculuded == 0 && mdMeasQuality > 0.7)
@@ -117,20 +110,12 @@ namespace ORB_SLAM2
             }
         }
 
-        // 3D 检测的位姿
         Eigen::Matrix<double, 9, 1> cube_pose;
         cube_pose << mPos[0], mPos[1]-mScale[1]/2, mPos[2], mdRotZ, mdRotY, mdRotX, mScale[0], mScale[1], mScale[2];
         mTruthPosInCameraFrame.fromMinimalVector(cube_pose);
     }
 
 
-    // 思考: 为什么这些要加锁, 而后面的不需要加锁
-    // 1. 在tracking线程里给mBelngObject赋值(不是在建立detection时赋值的),在其他线程里读取了吗, 确实读取了
-    // 2. 在trackig线程里,建立Detectionobject时我对BBox直接赋值, 然后在其他线程里读取Detectionobject此时BBox正常不会冲突
-    // 最好的是这些基本属性我在建立的时候,就给然后用的时候即可拿出来直接用
-    // 我的detectionObject为什么要搞成指针,不搞成实际值赋值用
-    // 3. 在tracking线程里,我对mvKeysID赋值,紧跟建立detection后面,在其他线程里读取了吗? 在画图的线程里确实读取了 那我写的时候就要加锁
-    // 结论是DetectionObject函数里面都应该加锁
     MapObject* DetectionObject::GetMapObject()
     {
         unique_lock<mutex> lock(mMutexMapObject);

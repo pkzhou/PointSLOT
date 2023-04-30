@@ -67,34 +67,34 @@ Tracking::Tracking(System *pSys, ORBVocabulary* pVoc, FrameDrawer *pFrameDrawer,
     // Load camera parameters from settings file
 
     cv::FileStorage fSettings(strSettingPath, cv::FileStorage::READ);
-    // 决定了算法模式，
+
     EnSLOTMode = fSettings["SLOT.MODE"];
     if(EnSLOTMode == 1)
         EnDynaSLAMMode = fSettings["DynaSLAM.MODE"];
-    // 是否在线检测
+
     EnOnlineDetectionMode = fSettings["Object.EnOnlineDetectionMode"];
-    // 是否手动统一设置目标点在目标系范围
+
     int tmp1 = fSettings["Object.EbManualSetPointMaxDistance"];
     EbManualSetPointMaxDistance = tmp1 > 0 ? 1:0;
     if(EbManualSetPointMaxDistance)
         EfInObjFramePointMaxDistance = fSettings["Object.EfInObjFramePointMaxDistance"];
 
 
-    // 算法模式
+
     switch(EnSLOTMode)
     {
-        case 0: // SLAM 模式， 什么也不需要干
+        case 0:
         {
             break;
         }
-        case 1: // 动态SLAM模式
+        case 1:
         {
             if(EnDynaSLAMMode == 0)
             {
-                // 语义动态slam模式
-                if(EnOnlineDetectionMode)// 这里会分成在线还是离线的模式
+
+                if(EnOnlineDetectionMode)
                 {
-                    YoloInit(fSettings);// YOLOdetector初始化
+                    YoloInit(fSettings);// YOLOdetector initialization
                 }
                 else{
 
@@ -109,12 +109,9 @@ Tracking::Tracking(System *pSys, ORBVocabulary* pVoc, FrameDrawer *pFrameDrawer,
                         }
                         case 1:// virtual kitti
                         {
-                            /// 1. 读取object离线信息
                             std::string virtualkittiobjectposefile = EstrDatasetFolder + "/pose.txt";
                             std::string virtualkittibboxfile = EstrDatasetFolder + "/bbox.txt";
-                            ReadVirtualKittiObjectInfo(virtualkittiobjectposefile, virtualkittibboxfile);
-                            /// 2. 读取camera groundtruth
-                            /// 读取结果在 vector<cv::Mat> CameraGTpose_left, CameraGTpose_right
+
                             std::string virtualKittiCameraGroundthPoseFile = EstrDatasetFolder + "/extrinsic.txt";
                             ReadVirtualKittiCameraGT(virtualKittiCameraGroundthPoseFile);
                             break;
@@ -123,11 +120,10 @@ Tracking::Tracking(System *pSys, ORBVocabulary* pVoc, FrameDrawer *pFrameDrawer,
                             assert(0);
                     }
 
-                }// TODO 直接读取离线的目标数据
+                }
             }
             else
             {
-                // 目标跟踪动态slam模式,只是在线
                 int tmp = fSettings["Yolo.active"];
                 EbYoloActive = tmp > 0?true:false;
                 if(EbYoloActive == true)
@@ -135,7 +131,7 @@ Tracking::Tracking(System *pSys, ORBVocabulary* pVoc, FrameDrawer *pFrameDrawer,
                     YoloInit(fSettings);
                 }
                 mMultiTracker = new cv::MultiTracker();
-                for(size_t i=0; i<1; i++)  // 目前设置就跟踪一个目标
+                for(size_t i=0; i<1; i++)
                 {
                     cv::Ptr<cv::Tracker> Tracker = cv::TrackerCSRT::create();
                     mvTrackers.push_back(Tracker);
@@ -144,18 +140,17 @@ Tracking::Tracking(System *pSys, ORBVocabulary* pVoc, FrameDrawer *pFrameDrawer,
             break;
         }
 
-        case 2: // 目标跟踪模式, 单目标跟踪， 可以设置多个目标跟踪,
+        case 2:
         {
-            // TODO 应该也考虑kitti 或 是virtual_kitti的数据集 也有目标跟踪 模式
-            EnObjectCenter = fSettings["Viewer.ObjectCenter"]; // 目标系定在哪
-            EnInitDetObjORBFeaturesNum = fSettings["Object.EnInitDetObjORBFeaturesNum"]; // 初始化目标的点数
-            int temp2 = fSettings["Object.EbSetInitPositionByPoints"]; // 是否以三角化点来初始化目标的位置
+            EnObjectCenter = fSettings["Viewer.ObjectCenter"];
+            EnInitDetObjORBFeaturesNum = fSettings["Object.EnInitDetObjORBFeaturesNum"];
+            int temp2 = fSettings["Object.EbSetInitPositionByPoints"];
             EbSetInitPositionByPoints = temp2 > 0? 1:0;
-            // 目标先验尺度，仅仅是为了画图用
+
             EeigUniformObjScale(0) = fSettings["Object.Width.xc"];
             EeigUniformObjScale(1) = fSettings["Object.Height.yc"];
             EeigUniformObjScale(2) = fSettings["Object.Length.zc"];
-            // 目标初始的位置，相对于相机系， 其实也可以不需要目标的先验pose
+
             EeigInitPosition(0) = fSettings["Object.position.xc"];
             EeigInitPosition(1) = fSettings["Object.position.yc"];
             EeigInitPosition(2) = fSettings["Object.position.zc"];
@@ -163,7 +158,7 @@ Tracking::Tracking(System *pSys, ORBVocabulary* pVoc, FrameDrawer *pFrameDrawer,
             if(EnOnlineDetectionMode)
             {
                 mMultiTracker = new cv::MultiTracker();
-                for(size_t i=0; i<1; i++)  // 目前设置就跟踪一个目标
+                for(size_t i=0; i<1; i++)
                 {
                     cv::Ptr<cv::Tracker> Tracker = cv::TrackerCSRT::create();
                     mvTrackers.push_back(Tracker);
@@ -171,17 +166,17 @@ Tracking::Tracking(System *pSys, ORBVocabulary* pVoc, FrameDrawer *pFrameDrawer,
             }
             else
             {
-                std::string objectFile = EstrDatasetFolder + "/object.txt"; // 读取该目标的离线数据
+                std::string objectFile = EstrDatasetFolder + "/object.txt";
                 ReadMynteyeObjectInfo(objectFile);
             }
             break;
         }
 
-        case 3: // 自动驾驶模式
+        case 3:
         {
-            EnObjectCenter = fSettings["Viewer.ObjectCenter"]; // 目标系定在哪
-            EnInitDetObjORBFeaturesNum = fSettings["Object.EnInitDetObjORBFeaturesNum"]; // 初始化目标的点数
-            int temp2 = fSettings["Object.EbSetInitPositionByPoints"]; // 是否以三角化点来初始化目标的位置
+            EnObjectCenter = fSettings["Viewer.ObjectCenter"];
+            EnInitDetObjORBFeaturesNum = fSettings["Object.EnInitDetObjORBFeaturesNum"];
+            int temp2 = fSettings["Object.EbSetInitPositionByPoints"];
             EbSetInitPositionByPoints = temp2 > 0? 1:0;
             switch(EnOnlineDetectionMode)
             {
@@ -198,12 +193,9 @@ Tracking::Tracking(System *pSys, ORBVocabulary* pVoc, FrameDrawer *pFrameDrawer,
                         }
                         case 1:// virtual kitti
                         {
-                            /// 1. 读取object离线信息
                             std::string virtualkittiobjectposefile = EstrDatasetFolder + "/pose.txt";
                             std::string virtualkittibboxfile = EstrDatasetFolder + "/bbox.txt";
                             ReadVirtualKittiObjectInfo(virtualkittiobjectposefile, virtualkittibboxfile);
-                            /// 2. 读取camera groundtruth
-                            /// 读取结果在 vector<cv::Mat> CameraGTpose_left, CameraGTpose_right
                             std::string virtualKittiCameraGroundthPoseFile = EstrDatasetFolder + "/extrinsic.txt";
                             ReadVirtualKittiCameraGT(virtualKittiCameraGroundthPoseFile);
                             break;
@@ -216,14 +208,13 @@ Tracking::Tracking(System *pSys, ORBVocabulary* pVoc, FrameDrawer *pFrameDrawer,
 
                 case 1:
                 {
-                    // 因为我目前只有2D检测， 因此也需要设置统一的尺度画图用
+
                     EeigUniformObjScale(0) = fSettings["Object.Width.xc"];
                     EeigUniformObjScale(1) = fSettings["Object.Height.yc"];
                     EeigUniformObjScale(2) = fSettings["Object.Length.zc"];
                     //EbSetInitPositionByPoints = true;
-                    // 初始化YOLO, deepSort算法
-                    YoloInit(fSettings); // 1. YOLOdetector初始化
-                    std::string sort_engine_path_ = fSettings["DeepSort.weightsPath"];// 2. DeepSort 算法初始化
+                    YoloInit(fSettings); // 1. YOLOdetector
+                    std::string sort_engine_path_ = fSettings["DeepSort.weightsPath"];// 2. DeepSort
                     mDeepSort = new DS::DeepSort(sort_engine_path_, 128, 256, 0, &mgLogger);
 
                     //test
@@ -232,7 +223,7 @@ Tracking::Tracking(System *pSys, ORBVocabulary* pVoc, FrameDrawer *pFrameDrawer,
                         ReadKittiObjectInfo(Kittiobjecttrackingfile);
                     }
 
-                    break; // 在线模式
+                    break;
                 }
 
                 default:
@@ -241,12 +232,12 @@ Tracking::Tracking(System *pSys, ORBVocabulary* pVoc, FrameDrawer *pFrameDrawer,
             break;
         }
 
-        case 4: // 终极算法测试模式，在此模式下会对选定的目标进行稳定跟踪（包括tracking和mapping），而其他目标会被认作不稳定区域而被去除
+        case 4:
         {
-            EnObjectCenter = fSettings["Viewer.ObjectCenter"]; // 目标系定在哪
+            EnObjectCenter = fSettings["Viewer.ObjectCenter"];
             EnSelectTrackedObjId = fSettings["Object.EnSelectTrackedObjId"];
-            EnInitDetObjORBFeaturesNum = fSettings["Object.EnInitDetObjORBFeaturesNum"]; // 初始化目标的点数
-            int temp2 = fSettings["Object.EbSetInitPositionByPoints"]; // 是否以三角化点来初始化目标的位置
+            EnInitDetObjORBFeaturesNum = fSettings["Object.EnInitDetObjORBFeaturesNum"];
+            int temp2 = fSettings["Object.EbSetInitPositionByPoints"];
             EbSetInitPositionByPoints = temp2 > 0? 1:0;
             switch(EnDataSetNameNum)
             {
@@ -260,12 +251,10 @@ Tracking::Tracking(System *pSys, ORBVocabulary* pVoc, FrameDrawer *pFrameDrawer,
                 }
                 case 1:// virtual kitti
                 {
-                    /// 1. 读取object离线信息
+
                     std::string virtualkittiobjectposefile = EstrDatasetFolder + "/pose.txt";
                     std::string virtualkittibboxfile = EstrDatasetFolder + "/bbox.txt";
-                    ReadVirtualKittiObjectInfo(virtualkittiobjectposefile, virtualkittibboxfile);
-                    /// 2. 读取camera groundtruth
-                    /// 读取结果在 vector<cv::Mat> CameraGTpose_left, CameraGTpose_right
+
                     std::string virtualKittiCameraGroundthPoseFile = EstrDatasetFolder + "/extrinsic.txt";
                     ReadVirtualKittiCameraGT(virtualKittiCameraGroundthPoseFile);
                     break;
@@ -307,7 +296,6 @@ Tracking::Tracking(System *pSys, ORBVocabulary* pVoc, FrameDrawer *pFrameDrawer,
     K.copyTo(mK);
     K.copyTo(EK);
 
-    //TODO 把相机参数拿出来供后面优化用
     mdCamProjMatrix.setIdentity();
     mdCamProjMatrix(0, 0) = fx;
     mdCamProjMatrix(0, 2) = cx;
@@ -321,7 +309,6 @@ Tracking::Tracking(System *pSys, ORBVocabulary* pVoc, FrameDrawer *pFrameDrawer,
     mpMap->mfCamProjMatrix = mfCamProjMatrix;
     mpMap->mfInvCamProjMatrix = mfInvCamProjMatrix;
 
-    //TODO 定义初始第一帧相对于世界坐标系, groundToInit, InitToGround
     mTc0w = cv::Mat::eye(4, 4, CV_32F);
     Eigen::Quaternionf pose_quat(EdInit_qw, EdInit_qx, EdInit_qy, EdInit_qz);
     Eigen::Matrix3f rot = pose_quat.toRotationMatrix(); // 	The quaternion is required to be normalized
@@ -436,7 +423,7 @@ Tracking::Tracking(System *pSys, ORBVocabulary* pVoc, FrameDrawer *pFrameDrawer,
 // YOLO init function
 void Tracking::YoloInit(const cv::FileStorage &fSettings)
 {
-    torch::DeviceType device_type; // 处理器类型
+    torch::DeviceType device_type;
     int isGPU = fSettings["Yolo.isGPU"];
     device_type = isGPU > 0 ? torch::kCUDA:torch::kCPU;
     EvClassNames = LoadNames("/home/zpk/SLOT/ORB_SLAM2/weights/coco.names");
@@ -445,7 +432,7 @@ void Tracking::YoloInit(const cv::FileStorage &fSettings)
         cout<<"There is no class file of YOLO!"<<endl;
         assert(0);
     }
-    EfConfThres = fSettings["Yolo.confThres"]; // 阈值
+    EfConfThres = fSettings["Yolo.confThres"];
     EfIouThres = fSettings["Yolo.iouThres"];
     std::string weights = fSettings["Yolo.weightsPath"];
     //weights = "/home/liuyuzhen/SLOT/orb-slam/code_tempbyme/DetectingAndTracking/libtorch-yolov5-master-temp/weights/yolov5s.torchscript";
@@ -455,7 +442,7 @@ void Tracking::YoloInit(const cv::FileStorage &fSettings)
     int width = fSettings["Camera.width"];
     int height = fSettings["Camera.height"];
     auto temp_img = cv::Mat::zeros(height, width, CV_32FC3);
-    mYOLODetector->Run(temp_img, 1.0f, 1.0f); // 前两张非常慢, 可以改成线程, 和loadORB词包一起
+    mYOLODetector->Run(temp_img, 1.0f, 1.0f);
     mYOLODetector->Run(temp_img, 1.0f, 1.0f);
 }
 
@@ -491,49 +478,33 @@ void Tracking::ReadKittiPoseInfo(const std::string &PoseFile){
     OfflineFramePoses = Pose_temp;
 }
 
-/// kitti: 输入文件格式: frame_id object_id 类型 truncated occuluded alpha bbox dimensions location rotation_y
-/// 输出格式：std::vector<std::vector<Eigen::Matrix<double, 1, 20>>> Kitti_AllTrackingObjectInformation
+/// kitti: input: frame_id object_id class truncated occuluded alpha bbox dimensions location rotation_y
+/// output: std::vector<std::vector<Eigen::Matrix<double, 1, 20>>> Kitti_AllTrackingObjectInformation
 /// 1-20： frame_id track_id truncated occuluded alpha bbox dimensions(height, width, length) location(x,y,z) rotation score type_id is_moving x1
-/// location是指在目标在相机坐标系下, type_id = 1才有效
-// 需要注意occuluded 参数和virtual kitti不同
+/// location: object position in camera frame
 void Tracking::ReadKittiObjectInfo(const std::string &inputfile)
 {
-    /// 1. 初始化： 相关变量定义
+
     std::vector<std::vector<Eigen::Matrix<double, 1, 24>>> all_object_temp;
     std::vector<Eigen::Matrix<double, 1, 24>> objects_inoneframe_temp;
 
     std::string pred_frame_obj_txts = inputfile;
-    /// 1.3 读取源跟踪结果文件， 转成流： filetxt
     std::ifstream filetxt(pred_frame_obj_txts.c_str());
-    /// 1.4 源文件的每一行
     std::string line;
-    /// 1.5 上一次的frame_id
     int frame_waibu_id = -1;
-    /// 1.6 读取每一行的filetxt到line， 并进行处理
     while(getline(filetxt, line))
     {
         if(!line.empty())
         {
-            /// 1.6.1 将line给stringstream: ss
             std::stringstream ss(line);
-            /// 1.6.2 将ss赋给每个变量
-            /// (1) 目标类型
             std::string type;
-            /// (2) 帧的id， 目标的id
             int frame_id, track_id;
-            /// (3) truncation的程度？？？ 是否遮挡， 目标的观测角
             double truncated, occuluded, alpha;
-            /// (4) 目标的2D框
             Eigen::Vector4d bbox;
-            /// (5) 目标的尺度
             Eigen::Vector3d dimensions;
-            /// (6) 目标的3D位置;
             Eigen::Vector3d locations;
-            /// (7) 目标的yaw角
             double rotation_y;
-            /// (8) 置信度
             double score;
-            /// (9) 类型：0是人，电车， dontcare等等; 1是需要跟踪的目标车辆
             double type_id;
 
             ss>>frame_id;
@@ -548,15 +519,9 @@ void Tracking::ReadKittiObjectInfo(const std::string &inputfile)
                 type_id = 1;
             }
 
-
-            /// 只保留'Car', 'Van', 'Truck'类型
-            /// 去除'Pedestrian', 'Person_sitting', 'Cyclist', 'Tram', 'Misc' or 'DontCare'
             //if(type == "Pedestrian" or type == "Person_sitting" or type == "Cyclist" or type == "Tram" or type == "Misc" or type == "DontCare")
             //   continue;
 
-            // TODO  如果该帧没有检测到object该怎么办？？
-
-            // 如果第一行不是从第0帧开始
             if(frame_id != 0 && frame_waibu_id == -1)
             {
                 while(int(all_object_temp.size()) != frame_id)
@@ -570,15 +535,11 @@ void Tracking::ReadKittiObjectInfo(const std::string &inputfile)
                 }
             }
 
-            // TODO 写入操作： 写入条件， 开始读新的一张图像时，把上一帧图像的object信息写入
-            // frame_waibu_id是上一行的frame_id， 二者不相同说明是这是一帧新图像(但是第一张图像也满足此条件，但第一张图像不存在上一张图像，因此跳过frame_waibu_id!=-1)
             if(frame_id != frame_waibu_id && frame_waibu_id != -1)
             {
-                // 把上一次的objects_inoneframe_temp放入
                 all_object_temp.push_back(objects_inoneframe_temp);
                 objects_inoneframe_temp.clear();
 
-                // 如果中间有帧没有检测到object，则填入为0的eigen
                 while(int(all_object_temp.size())!=frame_id)
                 {
                     Eigen::Matrix<double, 1, 24> oneobject_oneframe;
@@ -597,10 +558,10 @@ void Tracking::ReadKittiObjectInfo(const std::string &inputfile)
             ss>>bbox[1];
             ss>>bbox[2];
             ss>>bbox[3];
-            /// 注意： 这里重新修改bbox[2] 与 bbox[3]为width和height
+
             bbox[2] = bbox[2]-bbox[0];
             bbox[3] = bbox[3]-bbox[1];
-            ss>>dimensions[1]; // 注意kitti是height width length, 我存的数据结构是length  height width??
+            ss>>dimensions[1];
             ss>>dimensions[2];
             ss>>dimensions[0];
             ss>>locations[0];
@@ -613,7 +574,7 @@ void Tracking::ReadKittiObjectInfo(const std::string &inputfile)
             oneobject_oneframe [0] = frame_id;
             oneobject_oneframe [1] = track_id;
             oneobject_oneframe [2] = truncated;
-            oneobject_oneframe [3] = occuluded; // 需要注意的是,这个含义与virtual kitti不同: integer (0,1,2,3) indicating occlusion state: 0 = fully visible, 1 = partly occluded 2 = largely occluded, 3 = unknown
+            oneobject_oneframe [3] = occuluded;
             oneobject_oneframe [4] = alpha;
             oneobject_oneframe [5] = bbox[0];
             oneobject_oneframe [6] = bbox[1];
@@ -640,7 +601,6 @@ void Tracking::ReadKittiObjectInfo(const std::string &inputfile)
             int extend = 0;
             oneobject_oneframe [19] = extend;
 
-            // 右目相机的观测：bbox
             oneobject_oneframe [20] = 0;
             oneobject_oneframe [21] = 0;
             oneobject_oneframe [22] = 0;
@@ -653,23 +613,19 @@ void Tracking::ReadKittiObjectInfo(const std::string &inputfile)
         }
     }
 
-    // 如果此时的object size不等于frame_waibu_id， 那说明有问题， 举例: id为12,那么目前的object从0-11都有
-    if(int(all_object_temp.size())!=frame_waibu_id) // 此时的frame_waibu_id 与 frame_id相同
+    if(int(all_object_temp.size())!=frame_waibu_id)
     {
         cout<<"Error reading offline object pose information！！！"<<endl;
         exit(0);
     }
 
-
-    // 将最后一帧的object数据放入
     all_object_temp.push_back(objects_inoneframe_temp);
 
-    // 如果最后一帧不是实际上的最后一帧, 就将中间缺失帧的object信息填为0的eigen
     if(frame_waibu_id != int(EnImgTotalNum-1))
     {
         while(all_object_temp.size() != EnImgTotalNum)
         {
-            /// 为0的eigen
+
             Eigen::Matrix<double, 1, 24> oneobject_oneframe;
             oneobject_oneframe = Eigen::Matrix<double, 1, 24>::Zero();
             oneobject_oneframe [1] = -1;
@@ -684,15 +640,13 @@ void Tracking::ReadKittiObjectInfo(const std::string &inputfile)
 }
 
 /// virtual kitti
-/// 输入文件格式1pose：frame_id cameraId trackID alpha width height length
+/// pose：frame_id cameraId trackID alpha width height length
 /// world_space_x world_space_Y world_space_Z rotation_world_space_y rotation_world_space_x rotation_world_space_z
 /// camera_space_X camera_space_Y camera_space_Z rotation_camera_space_y rotation_camera_space_x rotation_camera_space_z
-/// 输入文件格式2bbox: frame_id cameraID trackID left right top bottom number_pixels truncation_ratio occupancy_ratio ismoving
-/// 输出文件格式(和KITTI相同)：std::vector<std::vector<Eigen::Matrix<double, 1, 24>>> Kitti_AllTrackingObjectInformation
+/// bbox: frame_id cameraID trackID left right top bottom number_pixels truncation_ratio occupancy_ratio ismoving
+/// output：std::vector<std::vector<Eigen::Matrix<double, 1, 24>>> Kitti_AllTrackingObjectInformation
 ///  frame_id track_id truncated occuluded alpha bbox[0]-box[3] dimensions[0]-dimensions[2]
 ///  location[0]-location[2] rotation_y score type_id is_moving extend bbox_right[0]-bbox[3]
-///// location还是指目标在相机坐标系下
-/// type_id 1是车
 void Tracking::ReadVirtualKittiObjectInfo(const std::string &objectposefile, const std::string &objectbboxfile)
 {
     std::vector<std::vector<Eigen::Matrix<double, 1, 24>>> all_object_temp;
@@ -708,18 +662,16 @@ void Tracking::ReadVirtualKittiObjectInfo(const std::string &objectposefile, con
     int camera_right = 0;
     size_t frame_id;
     int  cameraID, trackID;
-    // pose 信息
+    // pose
     double alpha, width, height, length, wx, wy,wz, rwy, rwx, rwz, cx, cy, cz, rcy, rcx, rcz;
-    // bbox信息
+    // bbox
     double left, right, top, bottom, number_pixels, truncation_ratio, occupancy_ratio;
     char is_moving[16];
 
-    // 分别读取, 第一行读了不要
     getline(posetxt, lineforpose);
     getline(bboxtxt, lineforbbox);
     while(getline(posetxt, lineforpose) && getline(bboxtxt, lineforbbox))
     {
-        // 分别读取一行
         if((!lineforpose.empty())&&(!lineforbbox.empty()))
         {
             std::stringstream sspose(lineforpose);
@@ -732,10 +684,8 @@ void Tracking::ReadVirtualKittiObjectInfo(const std::string &objectposefile, con
             Eigen::Matrix<double, 1, 24> oneobject_oneframe;
 
 
-            // 特殊情况1: 起始帧不是从第0帧开始
             if(frame_id != 0 && frame_waibu_id == -1)
             {
-                // 填入为0的eigen
                 while(all_object_temp.size() != frame_id)
                 {
                     Eigen::Matrix<double, 1, 24> oneobject_oneframe;
@@ -747,16 +697,12 @@ void Tracking::ReadVirtualKittiObjectInfo(const std::string &objectposefile, con
                 }
             }
 
-            /// 写入操作：
-            // 写入条件： 开始读新的一张图像时， 把上一帧图像的object信息写入
             if(int(frame_id) != frame_waibu_id && frame_waibu_id != -1)
             {
-                // 把上一次的objects_inoneframe_temp放入
                 all_object_temp.push_back(objects_inoneframe_temp);
                 camera_right=0;
                 objects_inoneframe_temp.clear();
 
-                // 特殊情况2： 如果中间有帧没有检测到object， 则填入为0的eigen
                 while(all_object_temp.size()!=frame_id)
                 {
                     Eigen::Matrix<double, 1, 24> oneobject_oneframe;
@@ -770,8 +716,7 @@ void Tracking::ReadVirtualKittiObjectInfo(const std::string &objectposefile, con
 
             if(cameraID==0)
             {
-                /// 正常赋值操作:
-                // 共用
+
                 sspose>>trackID;
                 ssbbox>>trackID;
                 // pose
@@ -810,9 +755,9 @@ void Tracking::ReadVirtualKittiObjectInfo(const std::string &objectposefile, con
                 oneobject_oneframe [6] = top;
                 oneobject_oneframe [7] = right-left;
                 oneobject_oneframe [8] = bottom-top;
-                oneobject_oneframe [9] = length; // x 是length
-                oneobject_oneframe [10] = height; // y 是height
-                oneobject_oneframe [11] = width; // z 是width
+                oneobject_oneframe [9] = length; // x length
+                oneobject_oneframe [10] = height; // y height
+                oneobject_oneframe [11] = width; // z width
 
                 if(ORB_SLAM2::EbManualSetPointMaxDistance == false)
                 {
@@ -823,12 +768,12 @@ void Tracking::ReadVirtualKittiObjectInfo(const std::string &objectposefile, con
                 oneobject_oneframe [12] = cx;
                 oneobject_oneframe [13] = cy;
                 oneobject_oneframe [14] = cz;
-                oneobject_oneframe [15] = rcy; // rcx, rcz为什么没有
+                oneobject_oneframe [15] = rcy; // rcx, rcz
                 oneobject_oneframe [16] = rcx; // 1 score
-                oneobject_oneframe [17] = 1; //  1 type_id， 直接就是车
+                oneobject_oneframe [17] = 1; //  1 type_id
 
                 //if(is_moving=="True")
-                if(strcmp(is_moving,"True") == 0)     //相等则返回0
+                if(strcmp(is_moving,"True") == 0)
                     oneobject_oneframe [18] = 1;
                 else
                     oneobject_oneframe [18] = 0;
@@ -876,15 +821,12 @@ void Tracking::ReadVirtualKittiObjectInfo(const std::string &objectposefile, con
         exit(0);
     }
 
-    // 将最后一帧的object数据放入
     all_object_temp.push_back(objects_inoneframe_temp);
 
-    // 如果最后一帧不是实际上的最后一帧, 就将中间缺失帧的object信息填为0的eigen
     if(frame_waibu_id != int(EnImgTotalNum-1))
     {
         while(all_object_temp.size() != EnImgTotalNum)
         {
-            /// 为0的eigen
             Eigen::Matrix<double, 1, 24> oneobject_oneframe;
             oneobject_oneframe = Eigen::Matrix<double, 1, 24>::Zero();
             oneobject_oneframe [1] = -1;
@@ -900,15 +842,11 @@ void Tracking::ReadVirtualKittiObjectInfo(const std::string &objectposefile, con
 }
 
 
-
-/// 读取真实的camera pose
-/// 输入文件格式为： frame_id cameraID r11 r12 r13 t1 r21 r22 r23 t2 r31 r32 r33 t3 0 0 0 1
-/// 输出文件格式为： vector<cv::Mat> CameraGTpose, Mat的格式和上面一样
 void Tracking::ReadVirtualKittiCameraGT(const std::string &cameraposefile)
 {
     std::ifstream cameraposetxt(cameraposefile.c_str());
     std::string linecamerapose;
-    // 第一行不要
+
     getline(cameraposetxt, linecamerapose);
     int frame_id;
     int camera_ID;
@@ -920,8 +858,7 @@ void Tracking::ReadVirtualKittiCameraGT(const std::string &cameraposefile)
             std::stringstream sscamerapose(linecamerapose);
             sscamerapose>>frame_id;
             sscamerapose>>camera_ID;
-            cv::Mat Pose_tmp = cv::Mat::eye(4, 4, CV_32F);// 32位浮点数
-            // 左目
+            cv::Mat Pose_tmp = cv::Mat::eye(4, 4, CV_32F);
             if(camera_ID==0)
             {
                 sscamerapose >> Pose_tmp.at<float>(0,0) >> Pose_tmp.at<float>(0,1) >>Pose_tmp.at<float>(0,2) >>Pose_tmp.at<float>(0,3)
@@ -932,7 +869,6 @@ void Tracking::ReadVirtualKittiCameraGT(const std::string &cameraposefile)
                 EvLeftCamGTPose.push_back(Pose_tmp);
 
             }
-            // 右目
             else{
 
                 sscamerapose >> Pose_tmp.at<float>(0,0) >> Pose_tmp.at<float>(0,1) >>Pose_tmp.at<float>(0,2) >>Pose_tmp.at<float>(0,3)
@@ -950,8 +886,6 @@ void Tracking::ReadVirtualKittiCameraGT(const std::string &cameraposefile)
 
 }
 
-
-/// Mynteye 读取object info: 要求只有一个目标, 数据总量等于目标的个数
 void Tracking::ReadMynteyeObjectInfo(const std::string &objInfo)
 {
     EvOfflineAllObjectDetections.reserve(EnImgTotalNum);
@@ -971,31 +905,29 @@ void Tracking::ReadMynteyeObjectInfo(const std::string &objInfo)
         std::stringstream ss(line);
 
         int frame_id;
-        int track_id = 1;// (2) 帧的id， 目标的id
-        double truncated = 0, occuluded = 1, alpha = 0;// (3) truncation的程度？？？ 是否遮挡， 目标的观测角
-        Eigen::Vector4d bbox; // (4) 目标的2D框
-        //Eigen::Vector3d dimensions(0.18, 0.53, 0.27);// (5) 目标的尺度xyz对应着目标坐标系的xyz, 而目标坐标系是与相机坐标系一致的, 即y是朝下
-        //Eigen::Vector3d locations(0, 0.83, 1.6);// (6) 目标的相机系3D位置;
-        //double rotation_y = 0;// (7) 目标的yaw角
+        int track_id = 1;
+        double truncated = 0, occuluded = 1, alpha = 0;
+        Eigen::Vector4d bbox;
         Eigen::Vector3d dimensions = EeigUniformObjScale;
         Eigen::Vector3d locations = EeigInitPosition;
         double rotation_y = EeigInitRotation(1);
 
-        double score = 1;// (8) 置信度
-        int type_id = 1;// (9) 类型：0是人，电车， dontcare等等; 1是需要跟踪的目标车辆
+        double score = 1;
+        int type_id = 1;
         int is_moving = 1;
         int extend = 0;
 
         ss>>frame_id;
         ss>>bbox[0];
         ss>>bbox[1];
-        ss>>bbox[2]; // yolo 检测的输出的就是宽和高
+        ss>>bbox[2];
         ss>>bbox[3];
 
         oneobject_oneframe [0] = frame_id;
         oneobject_oneframe [1] = track_id;
         oneobject_oneframe [2] = truncated;
-        oneobject_oneframe [3] = occuluded; // 需要注意的是,这个含义与virtual kitti不同: integer (0,1,2,3) indicating occlusion state: 0 = fully visible, 1 = partly occluded 2 = largely occluded, 3 = unknown
+        oneobject_oneframe [3] = occuluded;
+
         oneobject_oneframe [4] = alpha;
         oneobject_oneframe [5] = bbox[0];
         oneobject_oneframe [6] = bbox[1];
@@ -1026,11 +958,6 @@ void Tracking::ReadMynteyeObjectInfo(const std::string &objInfo)
         EvOfflineAllObjectDetections.push_back(objects_inoneframe_temp);
     }
 
-//    if(EvOfflineAllObjectDetections.size() != EnImgTotalNum)
-//    {
-//        cout<<"目标信息个数与图像数量不相等!!"<<endl;
-//        //assert(0);
-//    }
 }
 
 std::vector<std::string> Tracking::LoadNames(const std::string& path)
@@ -1170,7 +1097,6 @@ cv::Mat Tracking::GrabImageStereo(const cv::Mat &imRectLeft, const cv::Mat &imRe
 
 void Tracking::Track()
 {
-    // mState为tracking的状态机
     // SYSTME_NOT_READY, NO_IMAGE_YET, NOT_INITIALIZED, OK, LOST
 
     if(mState==NO_IMAGES_YET)
@@ -1292,7 +1218,7 @@ void Tracking::Track()
                 break;
             }
 
-            case 4: // 终极测试模式
+            case 4:
             {
 
                 TrackMapObject();
@@ -1459,7 +1385,7 @@ void Tracking::Track()
                 break;
             }
 
-            case 3: // 自动驾驶模式
+            case 3: // Autonomous Driving Mode
             {
                 for(size_t i=0; i<mCurrentFrame.mnDetObj; i++)
                 {
@@ -1600,21 +1526,17 @@ void Tracking::Track()
 }
 
 
-/// 跟踪动态目标, 由2D objects建立3D objects
-/// 3D objects属性: MapObject 最关键的两个属性是allFrameCuboidPoses(普通帧pose) 与 allDynamicPoses (关键帧pose)
-/// 策略： 若出现过(则利用速度模型)则更新3D object的pose(也可选择直接由2D离线结果给定): 若在时间阈值内，则利用速度模型;
-/// 若不在，则直接利用2D离线结果(即3D目标检测);
-/// 若没有出现过(在AllObjects里没有)，说明该object第一次观测到，则建立3D object(其初始位姿由2D离线结果给定)并加入AllObjects
+/// Track, Construct 3D objects from 2D instances
+///3D objects attribute: The two most critical attributes of MapObject are allFrameCuboidPoses (regular frame pose) and allDynamicPoses (keyframe pose)
+///Strategy: If it has occurred (then use the velocity model), update the pose of the 3D object (or choose to be directly given by the 2D offline results): If it is within the time threshold, use the velocity model;
+
 bool Tracking::TrackMapObject()
 {
     if(mCurrentFrame.mvDetectionObjects.size()==0)
         return false;
 
-    //cout<<endl<<"3D目标跟踪开始： "<<endl;
-
     /// 1. 遍历所有当前帧检测的2D objects：cuboids_on_frame.
-    // 判断之前是否出现过(在3D objects(AllObjects)是否有相同的):
-    // 若出现过(则利用速度模型)则更新3D object的pose: 更新方法: 若在时间阈值内，则利用速度模型; 若不在，则直接利用3D目标检测结果;
+
     for(size_t i=0; i<mCurrentFrame.mnDetObj;i++)
     {
         DetectionObject *candidate_cuboid = mCurrentFrame.mvDetectionObjects[i];
@@ -1622,50 +1544,43 @@ bool Tracking::TrackMapObject()
         if(candidate_cuboid==NULL)
             continue;
 
-        // 标志位： 这次检测的2D object是否出现过
         bool object_exists = false;
 
-        // 遍历AllObjects： 目前出现过的所有3D objects.
-        // 判断方法是判断2D bouding box与3D bounding box的truth id是否相同
         for(size_t j=0; j<AllObjects.size();j++)
         {
             MapObject *object_temp = AllObjects[j];
-            // 判定2D object的id与3D object的id是否相同
             if(object_temp->mnTruthID == candidate_cuboid->mnObjectID)
             {
                 g2o::ObjectState cInFrameLatestObjState;
-                // 更新上一次的目标状态
                 int nLatestFrameId = object_temp->GetCFLatestFrameObjState(cInFrameLatestObjState);// Tco
                 if(nLatestFrameId == -1)
                     assert(0);
-                if(!object_temp->mlRelativeFramePoses.count(nLatestFrameId)) // 如果最近帧没有参考关键帧肯定有问题
+                if(!object_temp->mlRelativeFramePoses.count(nLatestFrameId))
                     assert(0);
-                if(object_temp->mpReferenceObjKF !=  object_temp->mlRelativeFramePoses[nLatestFrameId].first) // 参考帧不一致
+                if(object_temp->mpReferenceObjKF !=  object_temp->mlRelativeFramePoses[nLatestFrameId].first)
                     assert(0);
                 cv::Mat camera_Tcl = cv::Mat::eye(4, 4, CV_32F);
                 if (!mCurrentFrame.mTcw.empty() && !mLastFrame.mTwc.empty()){
                     camera_Tcl = mCurrentFrame.mTcw.clone() * mLastFrame.mTwc.clone();
                 }
-                cInFrameLatestObjState.pose = Converter::toSE3Quat(camera_Tcl) * cInFrameLatestObjState.pose; // 更新
+                cInFrameLatestObjState.pose = Converter::toSE3Quat(camera_Tcl) * cInFrameLatestObjState.pose;
 
                 if(cInFrameLatestObjState.scale[0]<0.05)
                     assert(0);
 
-                g2o::ObjectState cuboid_current_temp;// 更新object在当前帧的pose： cuboid_current_temp
+                g2o::ObjectState cuboid_current_temp;
                 double delta_t = (mCurrentFrame.mnId - nLatestFrameId) * EdT;
-                if(delta_t < EdMaxObjMissingDt && EbUseOfflineAllObjectDetectionPosesFlag == false)// 判断当前帧离上一次观测到object是否没过去很久 (做为是否可以使用速度模型的条件)
+                if(delta_t < EdMaxObjMissingDt && EbUseOfflineAllObjectDetectionPosesFlag == false)
                 {
-                    /// 匀速模型,预测object的下一帧pose, 并且更新目标速度
+                    //Uniform velocity model, predicts the next frame pose of the object, and updates the target speed
                     //object_temp->mVirtualVelocity = Vector6d::Zero();
                     cuboid_current_temp = cInFrameLatestObjState;
                     bool currentpose = InitializeCurrentObjPose(i, cuboid_current_temp);
                     if (!currentpose)
-                    // 被遮挡情况下，利用速度预测
-                    cuboid_current_temp.UsingVelocitySetPredictPos(object_temp->mVirtualVelocity, delta_t);
+                        //Using speed prediction in case of occlusion
+                        cuboid_current_temp.UsingVelocitySetPredictPos(object_temp->mVirtualVelocity, delta_t);
                 }
                 else{
-                    /// (2) 如果不在阈值内, 直接用当前帧的检测结果：作为该object的最新pose
-                    // 1) 从检测结果(candidate_cuboid)中读出读出当前帧cuboid的pose: cuboid_current_temp, 这是在camera系
 //                    Vector9d cube_pose;
 //                    cube_pose << candidate_cuboid->mPos[0], candidate_cuboid->mPos[1], candidate_cuboid->mPos[2], 0, candidate_cuboid->mdRotY, 0, candidate_cuboid->mScale[0],
 //                            candidate_cuboid->mScale[1], candidate_cuboid->mScale[2];
@@ -1679,14 +1594,12 @@ bool Tracking::TrackMapObject()
                 FineTuningUsing2dBox(i,cuboid_current_temp);
 
                 g2o::ObjectState Swo(mCurrentFrame.mSETcw.inverse() * cuboid_current_temp.pose, cuboid_current_temp.scale);
-                object_temp->SetInFrameObjState(Swo, mCurrentFrame.mnId);// 设置该object的当前帧观测
+                object_temp->SetInFrameObjState(Swo, mCurrentFrame.mnId);
                 object_temp->SetCFInFrameObjState(cuboid_current_temp, mCurrentFrame.mnId);
 
-
-                candidate_cuboid->SetMapObject(object_temp);// cuboid 所属object给它绑定， 但是object的观测没有加因为用不到
-                object_temp->AddFrameObservation(mCurrentFrame.mnId, i);// 该object被观测次数+1
-                mCurrentFrame.mvMapObjects[i] = object_temp;// object在帧中与它的观测一一对应
-                // 存入该object的当前帧观测
+                candidate_cuboid->SetMapObject(object_temp);
+                object_temp->AddFrameObservation(mCurrentFrame.mnId, i);
+                mCurrentFrame.mvMapObjects[i] = object_temp;
                 object_temp->mmmDetections[mCurrentFrame.mnId] = candidate_cuboid;
 
                 //cv::waitKey(0);
@@ -1694,7 +1607,7 @@ bool Tracking::TrackMapObject()
                 object_exists = true;
                 if(nLatestFrameId == int(mLastFrame.mnId))
                 {
-                    //cout<<"目标: "<<candidate_cuboid->mnObjectID<<" 成功跟踪上一帧"<<", 目标速度: "<<object_temp->mVirtualVelocity.transpose()<<" dt: "<<delta_t<<endl;;
+                    //cout<<"Object: "<<candidate_cuboid->mnObjectID<<" success"<<", speed: "<<object_temp->mVirtualVelocity.transpose()<<" dt: "<<delta_t<<endl;;
                     int nInLastFrameDetObjOrder = mLastFrame.FindDetectionObject(candidate_cuboid);
                     if(nInLastFrameDetObjOrder == -1)
                         assert(0);
@@ -1709,8 +1622,8 @@ bool Tracking::TrackMapObject()
             }
 
         }
-        // 若没有出现过(在AllObjects里没有)，说明该object第一次观测到，则建立3D object并加入AllObjects
-        if(object_exists==false)// 该目标第一次出现
+        // If the object is observed for the first time, establish a 3D object and add All Objects
+        if(object_exists==false)
         {
             MapObjectInit(i);
         }
@@ -1725,10 +1638,9 @@ bool Tracking::TrackMapObject()
 }
 
 bool Tracking::InitializeCurrentObjPose(const int &i, g2o::ObjectState &Pose) {
-    //每帧initialize对准2D框，创建关键帧时考虑fit 3D框
-    //另外 没点的物体tracking状态没有保持，修改一下(还是加上了Reinit)
+    //align the pose with the 2D bounding box
     DetectionObject* candidate_cuboid = mCurrentFrame.mvDetectionObjects[i];
-    int nNum = 0; // 三角化目标点
+    int nNum = 0;
     vector<pair<Eigen::Vector3d, int>> Pcjs;
     Pcjs.reserve(mCurrentFrame.mvObjKeysUn[i].size());
     for(size_t n=0; n<mCurrentFrame.mvObjKeysUn[i].size();n++)
@@ -1745,14 +1657,14 @@ bool Tracking::InitializeCurrentObjPose(const int &i, g2o::ObjectState &Pose) {
         }
     }
 
-    // RANSAC滤出一些离谱点
+    // RANSAC
     std::vector<int> best_inlier_set;
     float fMaxDis = EbManualSetPointMaxDistance ? EfInObjFramePointMaxDistance: candidate_cuboid->mTruthPosInCameraFrame.scale.norm();
     unsigned int l = Pcjs.size();
     cv::RNG rng;
     double bestScore = -1.;
     int iterations = 0.8 * Pcjs.size();
-    for(int k=0; k<iterations; k++) // 迭代次数
+    for(int k=0; k<iterations; k++)
     {
         std::vector<int> inlier_set;
         int i1 = rng(l);
@@ -1761,9 +1673,9 @@ bool Tracking::InitializeCurrentObjPose(const int &i, g2o::ObjectState &Pose) {
         for(int u=0; u<l; u++)
         {
             Eigen::Vector3d v = Pcjs[u].first-p1;
-            if( v.norm() < fMaxDis ) // 到直线的距离
+            if( v.norm() < fMaxDis )
             {
-                inlier_set.push_back(u);// 将点添加到集合中
+                inlier_set.push_back(u);
                 score++;
             }
         }
@@ -1805,13 +1717,8 @@ void Tracking::FineTuningUsing2dBox(const int &i, g2o::ObjectState &Pose)
 //    cv::rectangle(showimg, rectbox,cv::Scalar(255,0,0), 2);
 //    cv::imshow("Projection 2d box comparison", showimg);
 //    cv::waitKey(0);
-    // Rectbox和projbox的对准策略：
-    // 解耦三个变量对准
-    // 方框中心作差，移动3D框中心
-    // 方框高度利用深度微调。
-    // 方框宽度利用3D框yaw角来微调。
 
-    // 1.方框中心y坐标调整
+    // 1. bounding box center y alignment
     double y1 = Pose.translation()[1];
     double y = Pose.translation()[1];
     cv::Point_<double> delta_center = (projbox.tl()+projbox.br()) / 2 - (rectbox.tl()+rectbox.br()) / 2;
@@ -1829,9 +1736,10 @@ void Tracking::FineTuningUsing2dBox(const int &i, g2o::ObjectState &Pose)
         delta_center = (projbox.tl()+projbox.br()) / 2 - (rectbox.tl()+rectbox.br()) / 2;
         if (abs(delta_center.y)<1) { break; }
     }
-    //cout << "前后对比情况" << y1 << " " << Pose.translation()[1] << ", gt" << cuboid->mTruthPosInCameraFrame.translation()[1] << endl;
 
-    // 2.根据投影方框高度到2D检测方框中心对比来调整深度
+
+    // 2.bounding box height
+    // depth alignment
     double z = Pose.translation()[2];
     if (z>8) {
         double z1 = Pose.translation()[2];
@@ -1849,14 +1757,13 @@ void Tracking::FineTuningUsing2dBox(const int &i, g2o::ObjectState &Pose)
             projbox = cv::Rect(proj[0], proj[1], proj[2] - proj[0], proj[3] - proj[1]);
             delta_h = projbox.height - rectbox.height;
             if (abs(delta_h) < 1) {
-                //cout << endl << "迭代次数" << i << "  " << delta_h << endl;
                 break;
             }
         }
-        //cout << "前后对比情况" << z1 << " " << Pose.translation()[2] << ", gt"<< cuboid->mTruthPosInCameraFrame.translation()[2] << endl;
+
     }
 
-    // 3.根据投影方框中心到2D检测方框中心对比，调整x坐标
+    // 3. center x alignment
     double x = Pose.translation()[0];
     double x1 = Pose.translation()[0];
     delta_center = (projbox.tl()+projbox.br()) / 2 - (rectbox.tl()+rectbox.br()) / 2;
@@ -1873,45 +1780,9 @@ void Tracking::FineTuningUsing2dBox(const int &i, g2o::ObjectState &Pose)
         projbox =cv::Rect(proj[0],proj[1],proj[2]-proj[0],proj[3]-proj[1]);
         delta_center = (projbox.tl()+projbox.br()) / 2 - (rectbox.tl()+rectbox.br()) / 2;
         if (abs(delta_center.x) < 1) {
-            //cout << endl << "迭代次数" << i << "  " << delta_center.x << endl;
             break;
         }
     }
-    //cout << "前后对比情况" << x1 << " " << Pose.translation()[0] << ", gt"<< cuboid->mTruthPosInCameraFrame.translation()[0] << endl;
-
-//    // 4.根据投影方框的宽度到2D检测框宽度，调整yaw角
-//    double yaw = Pose.pose.toXYZPRYVector()[4];
-//    double yaw1 = Pose.pose.toXYZPRYVector()[4];
-//    double delta_w = projbox.width - rectbox.width;
-//    step = 0.0001;//m
-//    for (int i = 0; i < 400; i++) {
-//        cout << delta_w << " ";
-//        yaw = Pose.pose.toXYZPRYVector()[4];
-//        int direction = 1;
-//        if (delta_w < 0) direction = -1;
-//
-//        yaw = yaw - direction * step;
-//        cout<<yaw<<endl;
-//        Pose.setRotation(Eigen::Vector3d(0,yaw,0));
-//        proj = Pose.projectOntoImageRectFromCamera(K);
-//        projbox = cv::Rect(proj[0], proj[1], proj[2] - proj[0], proj[3] - proj[1]);
-//        delta_w = projbox.width - rectbox.width;
-//        if (abs(delta_w) <= 1) {
-//            cout << endl << "迭代次数" << i << "  " << delta_w << endl;
-//            break;
-//        }
-//    }
-//    cout << "前后对比情况" << yaw1 << " " << yaw << ", gt"<< cuboid->mTruthPosInCameraFrame.pose.toXYZPRYVector()[4] << endl;
-//
-//    cv::Mat showimg2;
-//    mImGray.copyTo(showimg2);
-//    cv::rectangle(showimg2, projbox,cv::Scalar(0,0,255), 2);
-//    cv::rectangle(showimg2, rectbox,cv::Scalar(255,0,0), 2);
-//    cv::imshow("Projection 2d box comparison", showimg2);
-
-    // 3D框对齐点云
-    // 首先利用初始yaw角获得o系和o系下的点云
-    // 然后fit一个3D框，计算该3D框的objectstate，替换掉原来的Objctstate。
 }
 void Tracking::MapObjectInit(const int &i)
 {
@@ -1922,7 +1793,7 @@ void Tracking::MapObjectInit(const int &i)
     // initialize the object pose
     //InitPose.setRotation(Eigen::Vector3d(0,0,0));
     //InitPose.setScale(ORB_SLAM2::EeigUniformObjScale);
-    int nNum = 0; // 三角化目标点
+    int nNum = 0;
     vector<pair<Eigen::Vector3d, int>> Pcjs;
     Pcjs.reserve(mCurrentFrame.mvObjKeysUn[i].size());
     for(size_t n=0; n<mCurrentFrame.mvObjKeysUn[i].size();n++)
@@ -1939,14 +1810,14 @@ void Tracking::MapObjectInit(const int &i)
         }
     }
 
-    // RANSAC滤出一些离谱点
+    // RANSAC
     std::vector<int> best_inlier_set;
     float fMaxDis = EbManualSetPointMaxDistance ? EfInObjFramePointMaxDistance: InitPose.scale.norm();
     unsigned int l = Pcjs.size();
     cv::RNG rng;
     double bestScore = -1.;
     int iterations = 0.8 * Pcjs.size();
-    for(int k=0; k<iterations; k++) // 迭代次数
+    for(int k=0; k<iterations; k++)
     {
         std::vector<int> inlier_set;
         int i1 = rng(l);
@@ -1955,9 +1826,9 @@ void Tracking::MapObjectInit(const int &i)
         for(int u=0; u<l; u++)
         {
             Eigen::Vector3d v = Pcjs[u].first-p1;
-            if( v.norm() < fMaxDis ) // 到直线的距离
+            if( v.norm() < fMaxDis )
             {
-                inlier_set.push_back(u);// 将点添加到集合中
+                inlier_set.push_back(u);
                 score++;
             }
         }
@@ -1990,8 +1861,8 @@ void Tracking::MapObjectInit(const int &i)
     InitPose.setTranslation(eigObjPosition);
     FineTuningUsing2dBox(i,InitPose);
 
-    /// 3.1.2 读出当前帧cuboid的pose:   Two = Twc * Tco
-    MapObject *new_object = new MapObject(candidate_cuboid->mnObjectID, candidate_cuboid->GetDynamicFlag(),mCurrentFrame.mnId, true, Vector6d::Zero(), InitPose, true);// 建立object对象，设置其当前帧测量
+    /// 3.1.2 Read the current pose:   Two = Twc * Tco
+    MapObject *new_object = new MapObject(candidate_cuboid->mnObjectID, candidate_cuboid->GetDynamicFlag(),mCurrentFrame.mnId, true, Vector6d::Zero(), InitPose, true);// Construct the 3d object
     new_object->mbPoseInit = candidate_cuboid->mInitflag;
     new_object->SetInFrameObjState(g2o::ObjectState(mCurrentFrame.mSETcw.inverse() * InitPose.pose, InitPose.scale), mCurrentFrame.mnId);
     AllObjects.push_back(new_object);
@@ -2000,11 +1871,11 @@ void Tracking::MapObjectInit(const int &i)
     mCurrentFrame.mvMapObjects[i] = new_object;
     new_object->AddFrameObservation(mCurrentFrame.mnId, i);
     mCurrentFrame.mvnNewConstructedObjOrders.push_back(i);
-    ObjectKeyFrame* pKFini = new ObjectKeyFrame(mCurrentFrame, i, true);// 建立目标关键帧
-    new_object->mnLastKeyFrameId = mCurrentFrame.mnId; // 该目标的上一次关键帧就是这帧
+    ObjectKeyFrame* pKFini = new ObjectKeyFrame(mCurrentFrame, i, true);// Construct the object keyframe
+    new_object->mnLastKeyFrameId = mCurrentFrame.mnId;
     new_object->SetCFObjectKeyFrameObjState(pKFini, InitPose);
 
-    // 存入该object的当前帧观测
+
     new_object->mmmDetections[mCurrentFrame.mnId] = candidate_cuboid;
 
     int nReal = 0;
@@ -2027,12 +1898,11 @@ void Tracking::MapObjectInit(const int &i)
         nReal++;
     }
 
-    // 需不需要根据这个点数多少说明目标不行
     cout<<"Object: "<<candidate_cuboid->mnObjectID<<"  constructed successfully, "<<" features number: "<<nReal<<endl;
     cout<<endl;
     if(EnSLOTMode == 2 || EnSLOTMode == 3 || EnSLOTMode == 4)
         mpObjectLocalMapper->InsertOneObjKeyFrame(pKFini);
-    new_object->mpReferenceObjKF = pKFini; // 更新目标的参考关键帧
+    new_object->mpReferenceObjKF = pKFini;
 }
 
 void Tracking::MapObjectReInit(const int &order)
@@ -2047,8 +1917,6 @@ void Tracking::MapObjectReInit(const int &order)
     pMO->ClearMapObjectPoint();
 
     {
-        // 1. 三角化目标点， 求平均值
-
         vector<pair<Eigen::Vector3d, int>> Pcjs;
         Pcjs.reserve(mCurrentFrame.mvObjKeysUn[order].size());
 
@@ -2067,37 +1935,19 @@ void Tracking::MapObjectReInit(const int &order)
         if(!vDepthIdx.empty())
         {
             sort(vDepthIdx.begin(), vDepthIdx.end());
-            int nNum = 0; // 三角化目标点
+            int nNum = 0;
             for(size_t j=0; j<vDepthIdx.size(); j++)
             {
                 cv::Mat x3Dc = mCurrentFrame.UnprojectStereodynamic(order, vDepthIdx[j].second, false);
                 Eigen::Vector3d Pcj = Converter::toVector3d(x3Dc);
                 Pcjs.push_back(make_pair(Pcj, vDepthIdx[j].second));
                 nNum++;
-                if(vDepthIdx[j].first>2*mThDepth && nNum>100) // 意思是，超过有100个点，并且距离已经不准确了
+                if(vDepthIdx[j].first>2*mThDepth && nNum>100)
                     break;
             }
 
         }
 
-
-
-        /*
-        for(size_t n=0; n<mCurrentFrame.mvObjKeysUn[order].size();n++)
-        {
-            float z = mCurrentFrame.mvObjPointDepth[order][n];
-            //if(z > mThDepth)
-            //    continue;
-            if(z>0)
-            {
-                cv::Mat x3Dc = mCurrentFrame.UnprojectStereodynamic(order, n, false);
-                Eigen::Vector3d Pcj = Converter::toVector3d(x3Dc);
-                Pcjs.push_back(make_pair(Pcj, n));
-                nNum++;
-            }
-            if(z > mThDepth && nNum > 50)
-                break;
-        }*/
 
         // RANSAC滤出一些离谱点
         std::vector<int> best_inlier_set;
@@ -2106,7 +1956,7 @@ void Tracking::MapObjectReInit(const int &order)
         cv::RNG rng;
         double bestScore = -1.;
         int iterations = Pcjs.size();
-        for(int k=0; k<iterations; k++) // 迭代次数
+        for(int k=0; k<iterations; k++)
         {
             std::vector<int> inlier_set;
             int i1 = rng(l);
@@ -2115,9 +1965,9 @@ void Tracking::MapObjectReInit(const int &order)
             for(int u=0; u<l; u++)
             {
                 Eigen::Vector3d v = Pcjs[u].first-p1;
-                if( v.norm() < fMaxDis ) // 到直线的距离
+                if( v.norm() < fMaxDis )
                 {
-                    inlier_set.push_back(u);// 将点添加到集合中
+                    inlier_set.push_back(u);
                     score++;
                 }
             }
@@ -2138,7 +1988,6 @@ void Tracking::MapObjectReInit(const int &order)
         eigObjPosition /= best_inlier_set.size();
         if (eigObjPosition[2]<8)
             return;
-        // 2. 是否用目标点平均位置修正目标pose
         if (eigObjPosition[2]>8)
         eigObjPosition[2] += 0.2*pDet->mScale[0];
         eigObjPosition[1] = 0 + pDet->mScale[1]/2;
@@ -2146,14 +1995,14 @@ void Tracking::MapObjectReInit(const int &order)
 
         InitPose.setTranslation(eigObjPosition);
         FineTuningUsing2dBox(order,InitPose);
-        // 直接修正，目标的pose
+
         pMO->SetCFInFrameObjState(InitPose, mCurrentFrame.mnId);
 
         ObjectKeyFrame* pOKF = new ObjectKeyFrame(mCurrentFrame, order, true);
         pMO->mpReferenceObjKF = pOKF;
         pMO->SetCFObjectKeyFrameObjState(pOKF,pDet->mTruthPosInCameraFrame);
 
-        // 新建立的目标点
+
         int num1 = 0;
         for(auto &j: best_inlier_set)
         {
@@ -2175,7 +2024,7 @@ void Tracking::MapObjectReInit(const int &order)
             mCurrentFrame.mvpMapObjectPoints[order][n]=pNewMP;
             num1++;
         }
-        //cout<<"目标: "<<pDet->mnObjectID<<"跟踪失败后，重新建立"<<"新三角化目标点数: "<<num1<<endl;
+
         if(EnSLOTMode == 2 || EnSLOTMode == 3 || EnSLOTMode == 4)
             mpObjectLocalMapper->InsertOneObjKeyFrame(pOKF);
     }
@@ -2191,19 +2040,15 @@ void Tracking::InheritObjFromLastFrame(){
         if (candidate_cuboid == NULL)
             continue;
 
-        // 遍历AllObjects： 目前出现过的所有3D objects.
-        // 判断方法是判断2D bouding box与3D bounding box的truth id是否相同
         for (size_t j = 0; j < AllObjects.size(); j++) {
             MapObject *object_temp = AllObjects[j];
-            // 判定2D object的id与3D object的id是否相同
+
             if (object_temp->mnTruthID == candidate_cuboid->mnObjectID) {
-                candidate_cuboid->SetMapObject(object_temp);// cuboid 所属object给它绑定
+                candidate_cuboid->SetMapObject(object_temp);
             }
-            //mapobject上一帧匹配到观测，但该帧没有匹配到，则需要进一步判断是否需要预测框
-            // 判断上一帧是否在图像边界
-            // 预测框
-            // 判断该框是否在图像边界
-            // 构造一下 DetectionObject
+            //If the last frame of the mapobject matches the observation, but the frame does not match,
+            // it is necessary to further determine whether a prediction frame is needed
+            // TODO
         }
     }
     StaticPointRecoveryFromObj();
@@ -2381,7 +2226,7 @@ void Tracking::StaticPointRecoveryFromObj(){
         MapObject* pMO = cDO->GetMapObject();
         if (pMO){
             //bool DFixed = pMO->mbDynamicChanged;
-            // 如果该目标动静态属性已固定且为静态
+            // If the target dynamic and static properties are fixed and static
             if (pMO->GetDynamicFlag()==false){
                 if (!cDO->IsRecovered){
                     for (int j = 0; j < vObjKeys[i].size(); ++j) {
@@ -2394,7 +2239,7 @@ void Tracking::StaticPointRecoveryFromObj(){
                         vpMapPoints.push_back(static_cast<MapPoint*>(NULL));
                         vbOutlier.push_back(false);
                     }
-                    // 防止重复Recover
+                    // Prevent duplicate Recover
                     cDO->IsRecovered = vObjKeys[i].size();
                 }
 
@@ -2405,8 +2250,6 @@ void Tracking::StaticPointRecoveryFromObj(){
     //cout << "Before Recovery: " << mCurrentFrame.N ;
     N = vKeys.size();
     //cout << ", After Recovery: " << mCurrentFrame.N << endl;
-    // FIXME 如果不修改，初始化mGrid，两次执行后匹配的特征点特别少，还没想通是为啥。
-    //  只在本函数中执行不在Frame中执行的话，初始化的时候分配到Grid的特征点应该就没法用了。
     mCurrentFrame.AssignFeaturesToGrid();
 }
 
@@ -2424,7 +2267,7 @@ void Tracking::CheckReplacedMapObjectPointsInLastFrame()
                 if(pRep)
                 {
                     if (hashTmp.count(pRep->mnId))
-                        mLastFrame.mvpMapObjectPoints[n][i] = static_cast<MapObjectPoint *>(NULL); // static_cast 强制类型转换
+                        mLastFrame.mvpMapObjectPoints[n][i] = static_cast<MapObjectPoint *>(NULL);
                     else {
                         mLastFrame.mvpMapObjectPoints[n][i] = pRep;
                         hashTmp.insert(pRep->mnId);
@@ -2441,16 +2284,16 @@ void Tracking::CheckReplacedMapObjectPointsInLastFrame()
     }
 }
 
-/// 将上一帧的3D 动态mappoint通过光流跟踪传递到当前帧的mvpMapPointsdynamic
+
 void Tracking::TrackLastFrameObjectPoint(const bool &bUseTruthObjPoseFlag)
 {
     cout<<endl;
-    //cout<<YELLOW<<"目标点跟踪上一帧开始:"<<endl;
+    //cout<<YELLOW<<"Object point tracking last frame start:"<<endl;
     cout<<WHITE;
 
-    // 1. 如果是双目或者RGBD， 更新上一帧的动态landmarks
+
     vector<pair<size_t, size_t>> vInLastFrameTrackedObjOrders = mCurrentFrame.mvInLastFrameTrackedObjOrders;
-    //cout<<"临时三角化上一帧动态点: "<<endl;
+
     for(size_t n=0; n<vInLastFrameTrackedObjOrders.size(); n++)
     {
         size_t nLastOrder = vInLastFrameTrackedObjOrders[n].first;
@@ -2465,7 +2308,7 @@ void Tracking::TrackLastFrameObjectPoint(const bool &bUseTruthObjPoseFlag)
             continue;
         }
 
-        int nPoints = 0;// 三角化
+        int nPoints = 0;
         int nTotalPoints = 0;
         vector<pair<float, int>> vDepthIdx;
         for(size_t i=0; i<mLastFrame.mvObjPointDepth[nLastOrder].size();i++)
@@ -2488,13 +2331,13 @@ void Tracking::TrackLastFrameObjectPoint(const bool &bUseTruthObjPoseFlag)
                 bCreateNew = true;
             else if((EnSLOTMode == 2 || EnSLOTMode == 3 || EnSLOTMode == 4) && pMP->Observations()<1)
             {
-                bCreateNew = true;// 目标点的关键帧观测小于 1
+                bCreateNew = true;
             }
             if(bCreateNew)
             {
                 g2o::ObjectState gcCuboidTmp;
                 cv::Mat map_to_obj, x3Dc;
-                x3Dc = mLastFrame.UnprojectStereodynamic(nLastOrder, i, false);// 得到在相机系位置
+                x3Dc = mLastFrame.UnprojectStereodynamic(nLastOrder, i, false);
                 if(bUseTruthObjPoseFlag)
                 {
                     gcCuboidTmp = cCuboidTemp->mTruthPosInCameraFrame;
@@ -2504,16 +2347,16 @@ void Tracking::TrackLastFrameObjectPoint(const bool &bUseTruthObjPoseFlag)
                     gcCuboidTmp = pMO->GetCFInFrameObjState(mLastFrame.mnId); // Tco
                     map_to_obj = Converter::toCvMat(gcCuboidTmp.pose.inverse().map(Converter::toVector3d(x3Dc))); // Poj = Tco.inverse() * Pcj
                 }
-                Eigen::Vector3f feature_in_object = Converter::toVector3f(map_to_obj);// 转成向量好判断
+                Eigen::Vector3f feature_in_object = Converter::toVector3f(map_to_obj);
                 float fMaxDis = EbManualSetPointMaxDistance ? EfInObjFramePointMaxDistance: gcCuboidTmp.scale.norm();
                 if (feature_in_object.norm() > fMaxDis)
                 {
                     continue;
                 }
-                MapObjectPoint *pNewMP = new MapObjectPoint(pMO, map_to_obj, x3Dc, &mLastFrame, nLastOrder, i);// 建立动态特征点（要不要与object相互绑定）
-                mLastFrame.mvpMapObjectPoints[nLastOrder][i] = pNewMP;// 加入上一帧
-                pMO->mlpTemporalPoints.push_back(pNewMP); // 放到临时容器中, 不需要放入cuboidtemp中吗
-                cCuboidTemp->AddMapObjectPoint(i, pNewMP); // 应该是不需要添加观测什么的
+                MapObjectPoint *pNewMP = new MapObjectPoint(pMO, map_to_obj, x3Dc, &mLastFrame, nLastOrder, i);
+                mLastFrame.mvpMapObjectPoints[nLastOrder][i] = pNewMP;
+                pMO->mlpTemporalPoints.push_back(pNewMP);
+                cCuboidTemp->AddMapObjectPoint(i, pNewMP);
                 nPoints++;
                 nTotalPoints++;
             }
@@ -2524,10 +2367,10 @@ void Tracking::TrackLastFrameObjectPoint(const bool &bUseTruthObjPoseFlag)
             if(vDepthIdx[j].first>2*mThDepth)
                 break;
         }
-        //cout<<"目标: "<< pMO->mnTruthID<<" 三角化目标点数： "<<nTotalPoints<<endl;
+
     }
 
-    // 2. 跟踪上一帧的目标点
+
     vector<size_t> vnNeedToBeOptimized;
     vnNeedToBeOptimized.reserve(vInLastFrameTrackedObjOrders.size());
     for(size_t n=0; n<vInLastFrameTrackedObjOrders.size(); n++)
@@ -2540,7 +2383,7 @@ void Tracking::TrackLastFrameObjectPoint(const bool &bUseTruthObjPoseFlag)
         int temp = 0;
         switch(temp)
         {
-            case 0: // 直接暴力匹配
+            case 0: // Brute Matching
             {
                 vector<MapObjectPoint* >vpMapObjectPointMatches;
                 int nmatches = matcher.SearchByBruceMatching(mLastFrame, mCurrentFrame, nLastOrder, nCurrentOrder, vpMapObjectPointMatches);
@@ -2550,12 +2393,12 @@ void Tracking::TrackLastFrameObjectPoint(const bool &bUseTruthObjPoseFlag)
                     pDet->mbTrackOK = false;
                 else
                 {
-                    vnNeedToBeOptimized.push_back(nCurrentOrder); // 没被优化的目标肯定是跟踪状态是false
+                    vnNeedToBeOptimized.push_back(nCurrentOrder);
                 }
                 break;
             }
 
-            case 1: // 离线光流跟踪
+            case 1: // Offline optical flow tracking
             {
                 int nmatches = matcher.SearchByOfflineOpticalFlowTracking(mLastFrame, mCurrentFrame, nLastOrder, nCurrentOrder);
                 if(nmatches < 10)
@@ -2579,8 +2422,8 @@ void Tracking::TrackLastFrameObjectPoint(const bool &bUseTruthObjPoseFlag)
 
     if(1)
     {
-        Optimizer::CFSE3ObjStateOptimization(&mCurrentFrame, vnNeedToBeOptimized, false);// BA, 只优化有足够特征点的
-        for(size_t n=0; n<vnNeedToBeOptimized.size(); n++) // 遍历被优化后的目标
+        Optimizer::CFSE3ObjStateOptimization(&mCurrentFrame, vnNeedToBeOptimized, false);// BA
+        for(size_t n=0; n<vnNeedToBeOptimized.size(); n++)
         {
             int t1=0, t2 =0, t3=0, t4 =0;
             size_t i = vnNeedToBeOptimized[n];
@@ -2591,7 +2434,7 @@ void Tracking::TrackLastFrameObjectPoint(const bool &bUseTruthObjPoseFlag)
                 if(mCurrentFrame.mvpMapObjectPoints[i][m]==NULL)
                     continue;
                 t1++;
-                if(mCurrentFrame.mvbObjKeysOutlier[i][m]) // 如果该点是外点
+                if(mCurrentFrame.mvbObjKeysOutlier[i][m])
                 {
                     MapObjectPoint* pMP = mCurrentFrame.mvpMapObjectPoints[i][m];
                     mCurrentFrame.mvpMapObjectPoints[i][m]=static_cast<MapObjectPoint*>(NULL);
@@ -2610,22 +2453,12 @@ void Tracking::TrackLastFrameObjectPoint(const bool &bUseTruthObjPoseFlag)
                 }
             }
 
-
-//            if(EnSLOTMode == 3) // 自动驾驶模式是没有目标关键帧的
-//            {
-//                if(t3+t4<10) //  优化完成, 需要进一步看看这些目标的跟踪状态是否跟踪成功
-//                    pDet->mbTrackOK = false;
-//                else
-//                    pDet->mbTrackOK = true;
-//                cout<<"目标"<<pDet->mnObjectID<<" 跟踪上一帧内点数量:"<<t3+t4<<" tracking状态: "<<pDet->mbTrackOK<<endl;
-//            }
-//            else
             {
-                if(nmatchesMap<10) //  优化完成, 需要进一步看看这些目标的跟踪状态是否跟踪成功
+                if(nmatchesMap<10)
                     pDet->mbTrackOK = false;
                 else
                     pDet->mbTrackOK = true;
-                //cout<<"目标"<<pDet->mnObjectID<<" 跟踪上一帧内点数量:"<<nmatchesMap<<" tracking状态: "<<pDet->mbTrackOK<<endl;
+                //cout<<"Object"<<pDet->mnObjectID<<" Track the number of points in the previous frame: "<<nmatchesMap<<" tracking status: "<<pDet->mbTrackOK<<endl;
             }
         }
     }
@@ -2635,7 +2468,7 @@ void Tracking::TrackLastFrameObjectPoint(const bool &bUseTruthObjPoseFlag)
 void Tracking::TrackObjectLocalMap()
 {
     cout<<endl;
-    //cout<<YELLOW<<"目标点跟踪局部地图开始:"<<WHITE<<endl;
+    //cout<<YELLOW<<"The Object point tracking local map starts:"<<WHITE<<endl;
 
     vector<size_t> vnNeedToBeOptimized;
     vnNeedToBeOptimized.reserve(mCurrentFrame.mvTotalTrackedObjOrders.size());
@@ -2643,12 +2476,10 @@ void Tracking::TrackObjectLocalMap()
     {
         size_t nOrder = mCurrentFrame.mvTotalTrackedObjOrders[n];
         DetectionObject* pDet = mCurrentFrame.mvDetectionObjects[nOrder];
-//        if(pDet->mbTrackOK == false) // 只有前面跟踪上一帧或跟踪参考帧成功了的目标(此时目标点数目不会少)才会跟踪局部地图
-//            continue;
-        UpdateObjectLocalKeyFrames(nOrder); // 1. 更新局部关键帧
-        UpdateObjectLocalPoints(nOrder); // 2. 更新局部地图点
+
+        UpdateObjectLocalKeyFrames(nOrder);
+        UpdateObjectLocalPoints(nOrder);
         int nTracks = SearchObjectLocalPoints(nOrder);
-        //cout<<"跟踪局部地图3D点数: "<<nTracks<<endl;
 
         vnNeedToBeOptimized.push_back(nOrder);
     }
@@ -2658,7 +2489,7 @@ void Tracking::TrackObjectLocalMap()
     if(1)
     {
         Optimizer::CFSE3ObjStateOptimization(&mCurrentFrame, vnNeedToBeOptimized, false);
-        for(size_t n=0; n<vnNeedToBeOptimized.size(); n++)// 优化完剔除外点
+        for(size_t n=0; n<vnNeedToBeOptimized.size(); n++)
         {
             size_t nOrder = vnNeedToBeOptimized[n];
             DetectionObject* pDet = mCurrentFrame.mvDetectionObjects[nOrder];
@@ -2669,11 +2500,11 @@ void Tracking::TrackObjectLocalMap()
                 if(pMP==NULL)
                     continue;
                 t1++;
-                if(mCurrentFrame.mvbObjKeysOutlier[nOrder][m] == false)// 如果不是outlier
+                if(mCurrentFrame.mvbObjKeysOutlier[nOrder][m] == false)
                 {
                     t2++;
                     pMP->IncreaseFound();
-                    if(pMP->Observations()>0) // 需要是关键帧里的点
+                    if(pMP->Observations()>0)
                     {
                         t3++;
                         pDet->mnMatchesInliers++;
@@ -2682,15 +2513,15 @@ void Tracking::TrackObjectLocalMap()
                 }
                 else{
                     t4++;
-                    mCurrentFrame.mvpMapObjectPoints[nOrder][m] = static_cast<MapObjectPoint*>(NULL); // 注意只是从当前帧删除, 并未将其outlier标志位置为false
+                    mCurrentFrame.mvpMapObjectPoints[nOrder][m] = static_cast<MapObjectPoint*>(NULL);
                 }
             }
 
-            if(pDet->mnMatchesInliers>10) // 优化完成需要进一步判断目标的跟踪状态
+            if(pDet->mnMatchesInliers>10)
                 pDet->mbTrackOK = true;
             else
                 pDet->mbTrackOK = false;
-            //cout<<"目标"<<pDet->mnObjectID<<" 跟踪局部地图内点数量:"<<pDet->mnMatchesInliers<<" tracking状态: "<<pDet->mbTrackOK<<" t1:"<<t1<<" t2:"<<t2<<" t3:"<<t3<<" t4: "<<t4<<endl;
+            //cout<<"Object"<<pDet->mnObjectID<<" Track the number of points in the local map: "<<pDet->mnMatchesInliers<<" tracking status: "<<pDet->mbTrackOK<<" t1:" <<t1<<" t2:"<<t2<<" t3:"<<t3<<" t4: "<<t4<<endl;
         }
     }
 }
@@ -2722,7 +2553,7 @@ int Tracking::SearchObjectLocalPoints(const size_t &n)
     for(vector<MapObjectPoint*>::iterator vit=pMO->mvpLocalMapObjectPoints.begin(), vend=pMO->mvpLocalMapObjectPoints.end(); vit!=vend; vit++)
     {
         MapObjectPoint* pMP = *vit;
-        if(pMP->mnLastFrameSeen == mCurrentFrame.mnId) // 跳过标记点
+        if(pMP->mnLastFrameSeen == mCurrentFrame.mnId)
             continue;
         if(pMP->isBad())
             continue;
@@ -2732,25 +2563,24 @@ int Tracking::SearchObjectLocalPoints(const size_t &n)
             nToMatch++;
         }
     }
-    //cout<<" 符合投影要求3D点数: "<<nToMatch<<" ";
 
     if(nToMatch>0)
     {
         ORBmatcher matcher(0.8);
         int th = 1;
-        nRealMatch = matcher.SearchByProjection(mCurrentFrame, n, pMO->mvpLocalMapObjectPoints,th); // 投影的方式来找点
+        nRealMatch = matcher.SearchByProjection(mCurrentFrame, n, pMO->mvpLocalMapObjectPoints,th);
     }
 
     return nRealMatch;
 }
 
-void Tracking::UpdateObjectLocalKeyFrames(const size_t &nInCurrentFrameOrder) // 更新局部关键帧
+void Tracking::UpdateObjectLocalKeyFrames(const size_t &nInCurrentFrameOrder)
 {
     MapObject* pMO = mCurrentFrame.mvMapObjects[nInCurrentFrameOrder];
     if(pMO==NULL)
         return;
     map<ObjectKeyFrame*,int> keyframeCounter;
-    for(size_t i=0; i<mCurrentFrame.mvpMapObjectPoints[nInCurrentFrameOrder].size(); i++) // 得到当前帧的共视关键帧, 并统计权重
+    for(size_t i=0; i<mCurrentFrame.mvpMapObjectPoints[nInCurrentFrameOrder].size(); i++)
     {
         if(mCurrentFrame.mvpMapObjectPoints[nInCurrentFrameOrder][i])
         {
@@ -2773,7 +2603,7 @@ void Tracking::UpdateObjectLocalKeyFrames(const size_t &nInCurrentFrameOrder) //
     ObjectKeyFrame* pKFmax= static_cast<ObjectKeyFrame*>(NULL);
     pMO->mvLocalObjectKeyFrames.clear();
     pMO->mvLocalObjectKeyFrames.reserve(3*keyframeCounter.size());
-    // 共视关键帧加入局部地图
+
     for(map<ObjectKeyFrame*,int>::const_iterator it=keyframeCounter.begin(), itEnd=keyframeCounter.end(); it!=itEnd; it++)
     {
         ObjectKeyFrame* pKF = it->first;
@@ -2787,7 +2617,7 @@ void Tracking::UpdateObjectLocalKeyFrames(const size_t &nInCurrentFrameOrder) //
         pMO->mvLocalObjectKeyFrames.push_back(it->first);
         pKF->mnTrackReferenceForFrame = mCurrentFrame.mnId;
     }
-    // 共视关键帧的共视关键帧, 子关键帧, 父关键帧, 也加入局部地图
+
     for(vector<ObjectKeyFrame*>::const_iterator itKF=pMO->mvLocalObjectKeyFrames.begin(), itEndKF=pMO->mvLocalObjectKeyFrames.end(); itKF!=itEndKF; itKF++)
     {
         if(pMO->mvLocalObjectKeyFrames.size()>80)// Limit the number of keyframes
@@ -2834,7 +2664,7 @@ void Tracking::UpdateObjectLocalKeyFrames(const size_t &nInCurrentFrameOrder) //
     }
     if(pKFmax)
     {
-        // 直接对目标设置其参考关键帧
+
         MapObject* pMO= mCurrentFrame.mvMapObjects[nInCurrentFrameOrder];
         if(pMO==NULL)
             return;
@@ -2861,7 +2691,7 @@ void Tracking::UpdateObjectLocalPoints(const size_t &nOrder)
             MapObjectPoint* pMP = *itMP;
             if(!pMP)
                 continue;
-            if(pMP->mnTrackReferenceForFrame==mCurrentFrame.mnId) // 防止重复添加
+            if(pMP->mnTrackReferenceForFrame==mCurrentFrame.mnId)
                 continue;
 
             if(!pMP->isBad())
@@ -2869,14 +2699,14 @@ void Tracking::UpdateObjectLocalPoints(const size_t &nOrder)
                 pMO->mvpLocalMapObjectPoints.push_back(pMP);
                 pMP->mnTrackReferenceForFrame=mCurrentFrame.mnId;
 
-                if(!hash.count(pMP->mnId)) // 这个地方是为什么？
+                if(!hash.count(pMP->mnId))
                     hash.insert(pMP->mnId);
                 else
                     assert(0);
             }
         }
     }
-   //cout<<"目标"<<pMO->mnTruthID<<"局部关键帧数:"<<pMO->mvLocalObjectKeyFrames.size()<<" 局部3D点数: "<<pMO->mvpLocalMapObjectPoints.size()<<" ";
+    //cout<<"Object"<<pMO->mnTruthID<<"Number of local key frames:"<<pMO->mvLocalObjectKeyFrames.size()<<"Number of local 3D points: "<<pMO->mvpLocalMapObjectPoints.size( )<<" ";
 
    return;
 }
@@ -2888,10 +2718,10 @@ bool Tracking::NeedNewObjectKeyFrame(const size_t &nOrder)
     MapObject* pMO = mCurrentFrame.mvMapObjects[nOrder];
     if(pMO == NULL || pDetObj==NULL)
         assert(0);
-    //const bool bFlag1 = mCurrentFrame.mnId>=(pMO->mnLastKeyFrameId+mMaxFrames);// 条件1: 很长时间没有为这个object加入关键帧
-    const bool bFlag1 = mCurrentFrame.mnId>=(pMO->mnLastKeyFrameId+6);// 条件1: 很长时间没有为这个object加入关键帧
-    int nNonTrackedClose = 0;// 统计该目标当前帧已有的地图点数量
-    int nTrackedClose= 0;// 与 还可以生成的地图点数量
+    //const bool bFlag1 = mCurrentFrame.mnId>=(pMO->mnLastKeyFrameId+mMaxFrames);
+    const bool bFlag1 = mCurrentFrame.mnId>=(pMO->mnLastKeyFrameId+6);// Condition 1: No keyframe has been added to this object for a long time
+    int nNonTrackedClose = 0;
+    int nTrackedClose= 0;
     for(size_t i =0; i<mCurrentFrame.mvObjPointDepth[nOrder].size(); i++)
     {
         if(mCurrentFrame.mvObjPointDepth[nOrder][i]>0 && mCurrentFrame.mvObjPointDepth[nOrder][i]<mThDepth)
@@ -2903,9 +2733,9 @@ bool Tracking::NeedNewObjectKeyFrame(const size_t &nOrder)
         }
     }
     bool bNeedToInsertFlag =(nTrackedClose<20)&&(nNonTrackedClose>20);
-    int nRefMatches = mpReferenceKF->TrackedMapPoints(2); //得到参考关键帧中该目标的观测次数超过2的目标点数
-    const bool bFlag3 = (pDetObj->mnMatchesInliers < nRefMatches*0.1 || bNeedToInsertFlag);// 条件3: 该object跟踪效果不佳, 所有的inliers
-    const bool bFlag4 = pDetObj->mnMatchesInliers>20;// 条件4: 该目标在该帧的inliers数量要超过阈值
+    int nRefMatches = mpReferenceKF->TrackedMapPoints(2);
+    const bool bFlag3 = (pDetObj->mnMatchesInliers < nRefMatches*0.1 || bNeedToInsertFlag);// Condition 3: The object tracking effect is not good, all inliers
+    const bool bFlag4 = pDetObj->mnMatchesInliers>20;// Condition 4: The number of inliers of the target in this frame must exceed the threshold
     if((bFlag1||bFlag3) && bFlag4)
     {
         pDetObj->mbNeedCreateNewOKFFlag = true;
@@ -2918,7 +2748,7 @@ bool Tracking::NeedNewObjectKeyFrame(const size_t &nOrder)
 
 void Tracking::CreateNewObjectKeyFrame(const size_t &nOrder)
 {
-    // 直接在这里新建关键帧
+
     MapObject* moObjectTmp = mCurrentFrame.mvMapObjects[nOrder];
     DetectionObject* pDet = mCurrentFrame.mvDetectionObjects[nOrder];
 
@@ -2927,11 +2757,11 @@ void Tracking::CreateNewObjectKeyFrame(const size_t &nOrder)
     if(pDet->mbNeedCreateNewOKFFlag==false)
         assert(0);
 
-    ObjectKeyFrame* pOKF = new ObjectKeyFrame(mCurrentFrame, nOrder, false); // 设置参考关键帧为当前关键帧, 当前帧的参考关键帧为当前关键帧
-    moObjectTmp->mpReferenceObjKF = pOKF; // 设置目标的参考关键帧
-    moObjectTmp->SetCFObjectKeyFrameObjState(pOKF, moObjectTmp->GetCFInFrameObjState(mCurrentFrame.mnId));// 设置目标关键帧状态
+    ObjectKeyFrame* pOKF = new ObjectKeyFrame(mCurrentFrame, nOrder, false);
+    moObjectTmp->mpReferenceObjKF = pOKF;
+    moObjectTmp->SetCFObjectKeyFrameObjState(pOKF, moObjectTmp->GetCFInFrameObjState(mCurrentFrame.mnId));
     //cout<<"OKF Frame ID: "<<pOKF->mnFrameId<<", KF ID: "<<pOKF->mnId<<", Object ID"<<moObjectTmp->mnTruthID<<endl;
-    vector<pair<float,int> > vDepthIdx;// 双目三角化出来一些新的地图点
+    vector<pair<float,int> > vDepthIdx;// stereo triangulation
     size_t nObjKeysNum = mCurrentFrame.mvObjKeys[nOrder].size();
     vDepthIdx.reserve(nObjKeysNum);
     for(size_t i=0; i<nObjKeysNum; i++)
@@ -2955,7 +2785,7 @@ void Tracking::CreateNewObjectKeyFrame(const size_t &nOrder)
             {
                 bCreateNew = true;
             }
-            else if(pMP->Observations()<1)   // 该点被关键帧的观测次数少于1
+            else if(pMP->Observations()<1)
             {
                 bCreateNew = true;
                 mCurrentFrame.mvpMapObjectPoints[nOrder][i] = static_cast<MapObjectPoint*>(NULL);
@@ -2969,24 +2799,23 @@ void Tracking::CreateNewObjectKeyFrame(const size_t &nOrder)
                 g2o::SE3Quat Tco = ObjState.pose;
                 Eigen::Vector3d Poj = Tco.inverse().map(Converter::toVector3d(Pcj));
 
-                // 目标点位置超出了目标尺度范围
+
                 float fMaxDis = EbManualSetPointMaxDistance ? EfInObjFramePointMaxDistance: ObjState.scale.norm();
                 if(Poj.norm() > fMaxDis)
                     continue;
 
-                MapObjectPoint* pNewMP = new MapObjectPoint(moObjectTmp, Converter::toCvMat(Poj), Pcj, pOKF);// 关键帧建立目标地图点
+                MapObjectPoint* pNewMP = new MapObjectPoint(moObjectTmp, Converter::toCvMat(Poj), Pcj, pOKF);
                 if (!pNewMP->mpRefObjKF) assert(0);
-                pNewMP->AddObservation(pOKF,i);// 该点增加关键帧观测
-                pOKF->AddMapObjectPoint(pNewMP, i);// 该关键帧增加该地图点
-                pNewMP->ComputeDistinctiveDescriptors();// 该点计算描述子
-                pNewMP->UpdateNormalAndDepth();// 该点更新深度
+                pNewMP->AddObservation(pOKF,i);
+                pOKF->AddMapObjectPoint(pNewMP, i);
+                pNewMP->ComputeDistinctiveDescriptors();
+                pNewMP->UpdateNormalAndDepth();
                 moObjectTmp->AddMapObjectPoint(pNewMP);
 
-                if(mCurrentFrame.mvbObjKeysOutlier[nOrder][i] == false)// 如果该点对应的是outlier, 则不把该点放入当前帧
+                if(mCurrentFrame.mvbObjKeysOutlier[nOrder][i] == false)
                 {
-                    mCurrentFrame.mvpMapObjectPoints[nOrder][i] = pNewMP;// 该点加入当前帧
+                    mCurrentFrame.mvpMapObjectPoints[nOrder][i] = pNewMP;
                 }
-                // 该点加入地图
                 nPoints++;
             }
             else
@@ -2997,8 +2826,8 @@ void Tracking::CreateNewObjectKeyFrame(const size_t &nOrder)
                 break;
         }
     }
-    //创建关键帧时，新三角化的点比较准确，这时候有点漂移的框就拟合不上
-    if(EnSLOTMode == 2 || EnSLOTMode ==3 ||EnSLOTMode == 4) // 只有目标跟踪模式才插到局部建图线程去
+
+    if(EnSLOTMode == 2 || EnSLOTMode ==3 ||EnSLOTMode == 4)
     {
         mpObjectLocalMapper->InsertOneObjKeyFrame(pOKF);
     }
@@ -3007,62 +2836,45 @@ void Tracking::CreateNewObjectKeyFrame(const size_t &nOrder)
 
 }
 
-/// 双目初始化函数： 得到初始3D 静态 mappoints， 初始3D objects， 初始3D 动态 mappoints
+
 void Tracking::StereoInitialization()
 {
-    /// 双目初始化的条件是检测到的特征点数量超过500
+
     if(mCurrentFrame.N>500)
     {
         // Set Frame pose to the origin
-        /// 1. 设定初始位姿
+
         if(EbSetWorldFrameOnGroundFlag)
         {
-            /// 1.1 可以自己设定世界系为GroundToInit
             mCurrentFrame.SetPose(mTwc0);
         } else{
-            /// 1.2 世界系与首帧camera系重合
             mCurrentFrame.SetPose(cv::Mat::eye(4, 4, CV_32F));
         }
 
-        /// 2.  2D objects建立3D objects
         if(mCurrentFrame.mnDetObj!=0 && 0) // 第一帧没有track
         {
             TrackMapObject();
         }
 
-
-        /// 3. 将当前关键帧构建为初始关键帧
         KeyFrame* pKFini = new KeyFrame(mCurrentFrame,mpMap,mpKeyFrameDB);
 
         cout<<"!!!Stereo initialization: create the first keyframe: "<<pKFini->mnId<<"          total_id:    "<<mCurrentFrame.mnId<<endl;
 
-        /// 5. 在局部地图中添加该初始关键帧
         mpMap->AddKeyFrame(pKFini);
 
-
-        /// 6. 构造3D 静态 mappoints
         for(int i=0; i<mCurrentFrame.N;i++)
         {
             float z = mCurrentFrame.mvDepth[i];
             if(z>0)
             {
-                /// 6.1 通过反投影得到该特征点的3D坐标
                 cv::Mat x3D = mCurrentFrame.UnprojectStereo(i);
-                //cout<<"双目初始化动态点： "<<x3D<<endl;
 
-                /// 6.2 将3D点构造为mappoint
                 MapPoint* pNewMP = new MapPoint(x3D,pKFini,mpMap);
-                /// 6.3 为该mappoint添加属性:
-                /// 6.3.1 观测到该mappoint的关键帧
                 pNewMP->AddObservation(pKFini,i);
                 pKFini->AddMapPoint(pNewMP,i);
-                /// 6.3.2 计算描述子
                 pNewMP->ComputeDistinctiveDescriptors();
-                /// 6.3.3 计算平均观测方向和深度范围
                 pNewMP->UpdateNormalAndDepth();
-                /// 6.3.4 在地图中添加该mappoint
                 mpMap->AddMapPoint(pNewMP);
-                /// 6.3.5 为当前帧的添加该mappoint
                 mCurrentFrame.mvpMapPoints[i]=pNewMP;
             }
         }
@@ -3070,33 +2882,23 @@ void Tracking::StereoInitialization()
         cout << "New map created with " << mpMap->MapPointsInMap() << " static points" << "   and   "<<mpMap->MapObjectPointsInMap()<<"   dynamic points"<<endl;
 
 
-        /// 8. 在局部地图中添加该初始关键帧
         mpLocalMapper->InsertKeyFrame(pKFini);
 
-        /// 9. 更新mLastFrame
         mLastFrame = Frame(mCurrentFrame);
 
-        /// 10. 更新mnLastKeyFrameId, mpLastKeyFrame
         mnLastKeyFrameId=mCurrentFrame.mnId;
         mpLastKeyFrame = pKFini;
 
-        /// 11. 将当前关键帧加入局部关键帧集mvpLocalKeyFrames
         mvpLocalKeyFrames.push_back(pKFini);
-        /// 12. 将地图中的静态点, 和动态点分别加入局部静态点集, 局部动态点集
         mvpLocalMapPoints=mpMap->GetAllMapPoints();
 
-        /// 13. 设置mpmpReferenceKF为当前关键帧
         mpReferenceKF = pKFini;
-        /// 14. 设置当前帧的参考关键帧为当前关键帧
         mCurrentFrame.mpReferenceKF = pKFini;
 
-        /// 15. 把当前（最新的）局部MapPoints作为ReferenceMapPoints
         mpMap->SetReferenceMapPoints(mvpLocalMapPoints);
 
-        /// 16. ??
         mpMap->mvpKeyFrameOrigins.push_back(pKFini);
 
-        /// 17. For mpMapDrawer
         mpMapDrawer->SetCurrentCameraPoseAndId(mCurrentFrame.mTcw, mCurrentFrame.mnId);
 
         mState=OK;
@@ -3104,9 +2906,6 @@ void Tracking::StereoInitialization()
 
 }
 
-/// 检查上一帧中的MapPoints是否被替换
-/// Local Mapping线程可能会将关键帧中某些MapPoints进行替换，
-/// 由于tracking中需要用到mLastFrame，这里检查并更新上一帧中被替换的MapPoints
 void Tracking::CheckReplacedInLastFrame()
 {
     for(int i =0; i<mLastFrame.N; i++)
@@ -3115,7 +2914,6 @@ void Tracking::CheckReplacedInLastFrame()
 
         if(pMP)
         {
-            /// 2. 得到该landmark的替换点, 然后将替换点 替换掉上一帧中的landmark
             MapPoint* pRep = pMP->GetReplaced();
             if(pRep)
             {
@@ -3125,65 +2923,48 @@ void Tracking::CheckReplacedInLastFrame()
     }
 }
 
-/// 对参考关键帧的MapPoints进行跟踪
 bool Tracking::TrackReferenceKeyFrame()
 {
     // Compute Bag of Words vector
-    /// 1. 将当前帧的描述子转化为BoW向量
+
     cout<<"TrackReferenceKeyFrame"<<endl;
     mCurrentFrame.ComputeBoW();
 
     // We perform first an ORB matching with the reference keyframe
     // If enough matches are found we setup a PnP solver
-    /// 2. 建立ORBmatcher类对象
+
     ORBmatcher matcher(0.7,true);
     vector<MapPoint*> vpMapPointMatches;
-    /// 3. 静态点: 当前帧与参考关键帧静态特征点匹配, 匹配点存在vpMapPointMatches
+
     int nmatches = matcher.SearchByBoW(mpReferenceKF,mCurrentFrame,vpMapPointMatches);
 
-    //cout<<"静态跟踪参考帧3D点数: "<<nmatches<<endl;
-
-    /// 5. 如果静态点匹配数量小于15,则返回
     if(nmatches<15)
         return false;
 
-    /// 6. 将vpMapPointMatches存入当前帧
     mCurrentFrame.mvpMapPoints = vpMapPointMatches;
 
-    /// 7. 设置当前帧的位姿优化初值(上一帧的位姿)
     mCurrentFrame.SetPose(mLastFrame.mTcw);
-    //cout<<mCurrentFrame.mTcw<<endl;
-    /// 8. 优化当前帧的位姿, 利用3D-2D的重投影约束
     Optimizer::PoseOptimization(&mCurrentFrame);
 
-    // Discard outliers
-    /// 9. 剔除优化后的outlier匹配点（MapPoints）
     int nmatchesMap = 0;
-    /// 9.1 遍历该帧的所有静态特征点
     for(int i =0; i<mCurrentFrame.N; i++)
     {
         if(mCurrentFrame.mvpMapPoints[i])
         {
-            /// 9.2 如果它的标志位为1, 则进行剔除
             if(mCurrentFrame.mvbOutlier[i])
             {
-                /// 9.2.1 取出该静态landmark
                 MapPoint* pMP = mCurrentFrame.mvpMapPoints[i];
-                /// 9.2.2 剔除
                 mCurrentFrame.mvpMapPoints[i]=static_cast<MapPoint*>(NULL);
-                /// 9.2.3 标志位置为false
                 mCurrentFrame.mvbOutlier[i]=false;
-                /// 9.2.4 ???TODO
                 pMP->mbTrackInView = false;
-                /// 9.2.5 ???TODO
                 pMP->mnLastFrameSeen = mCurrentFrame.mnId;
                 nmatches--;
-            }/// 9.3 如果它的标志位为0, 且被观测次数大于0, 则nmatchesMap++TODO??
+            }
             else if(mCurrentFrame.mvpMapPoints[i]->Observations()>0)
                 nmatchesMap++;
         }
     }
-    /// 10. 如果nmatchesMap>=10, 返回TRUE
+
     return nmatchesMap>=10;
 }
 
@@ -3195,7 +2976,7 @@ void Tracking::UpdateLastFrame()
 
     mLastFrame.SetPose(Tlr*pRef->GetPose());
 
-    if(mnLastKeyFrameId==mLastFrame.mnId || mSensor==System::MONOCULAR || !mbOnlyTracking) // 上一帧是关键帧就不做,因为关键帧本来会生成地图点
+    if(mnLastKeyFrameId==mLastFrame.mnId || mSensor==System::MONOCULAR || !mbOnlyTracking)
         return;
 
     // Create "visual odometry" MapPoints
@@ -3239,31 +3020,25 @@ void Tracking::UpdateLastFrame()
         {
             nPoints++;
         }
-        if(vDepthIdx[j].first>2*mThDepth && nPoints>100) // 这个条件的含义是 插入所有满足距离条件的点, 可以大于100. 如果满足距离条件的点不足100, 那就插入100个最近的点. 如果所有的点数都不足100, 则全部插入
+        if(vDepthIdx[j].first>2*mThDepth && nPoints>100)
             break;
     }
 }
 
-/// 根据匀速度模型对上一帧的MapPoints进行跟踪
 bool Tracking::TrackWithMotionModel()
 {
-    /// 1. 初始化ORBmatcher类对象
     ORBmatcher matcher(0.9,true);
 
     // Update last frame pose according to its reference keyframe
     // Create "visual odometry" points if in Localization Mode
-    /// 2. 对于双目或rgbd摄像头，根据深度值为上一帧生成新的MapPoints
     UpdateLastFrame();
 
-    /// 3. 设置当前帧位姿的优化初值(匀速模型)
     mCurrentFrame.SetPose(mVelocity*mLastFrame.mTcw);
 
-    /// 4. 初始化当前帧的静态地图点集: mvpMapPoints, 为NULL
     fill(mCurrentFrame.mvpMapPoints.begin(),mCurrentFrame.mvpMapPoints.end(),static_cast<MapPoint*>(NULL));
 
     // Project points seen in previous frame
-    //th 阈值
-    /// 5. 当前帧与上一帧的地图点进行匹配, 根据上一帧特征点对应的3D点投影的位置缩小特征点匹配范围
+
     int th;
     if(mSensor!=System::STEREO)
         th=15;
@@ -3272,105 +3047,38 @@ bool Tracking::TrackWithMotionModel()
     int nmatches = matcher.SearchByProjection(mCurrentFrame,mLastFrame,th,mSensor==System::MONOCULAR);
 
     // If few matches, uses a wider window search
-    /// 6. 如果跟踪的点少，则扩大搜索半径再来一次
     if(nmatches<20)
     {
         fill(mCurrentFrame.mvpMapPoints.begin(),mCurrentFrame.mvpMapPoints.end(),static_cast<MapPoint*>(NULL));
         nmatches = matcher.SearchByProjection(mCurrentFrame,mLastFrame,2*th,mSensor==System::MONOCULAR);
     }
 
-    //cout<<"静态跟踪上一帧3D点数: "<<nmatches<<endl;
-
-    /// 9. 如果静态点跟踪数量很少, 则返回false
     if(nmatches<20)
         return false;
 
     // Optimize frame pose with all matches
-    /// 10. 优化相机位姿(利用静态点)
     Optimizer::PoseOptimization(&mCurrentFrame);
 
     // Discard outliers
-    /// 11. 剔除outlier的mvpMapPoints: 仅仅对静态点
     int nmatchesMap = 0;
-    /// 11.1 遍历当前帧的landmark
     for(int i =0; i<mCurrentFrame.N; i++)
     {
         if(mCurrentFrame.mvpMapPoints[i])
         {
-            /// 11.2 判断其outlier标志位是否为true
             if(mCurrentFrame.mvbOutlier[i])
             {
-                /// 11.3 取出该mappoint
                 MapPoint* pMP = mCurrentFrame.mvpMapPoints[i];
-                /// 11.4 从当前帧中删除
                 mCurrentFrame.mvpMapPoints[i]=static_cast<MapPoint*>(NULL);
                 mCurrentFrame.mvbOutlier[i]=false;
-                /// 11.5 设置该mappoint的属性???TODO
                 pMP->mbTrackInView = false;
                 pMP->mnLastFrameSeen = mCurrentFrame.mnId;
                 nmatches--;
             }
-            /// 11.2 (标志位)如果为false, 则判断其观测次数是否大于0
             else if(mCurrentFrame.mvpMapPoints[i]->Observations()>0)
                 nmatchesMap++;
         }
     }
 
-
-    // 静态点的重投影误差
-    if(0)
-    {
-        for(size_t i=0; i<mCurrentFrame.mvpMapPoints.size(); i++)
-        {
-            MapPoint* pMP = mCurrentFrame.mvpMapPoints[i];
-            if(pMP == NULL) // 只有可能是跟踪上一帧来的
-                continue;
-            cv::Mat wP = pMP->GetWorldPos();
-            Eigen::Vector3d eigwP, eigcP;
-            eigwP[0] = wP.at<float>(0);
-            eigwP[1] = wP.at<float>(1);
-            eigwP[2] = wP.at<float>(2);
-            eigcP = mCurrentFrame.mSETcw * eigwP;
-            const double invz = 1.0/eigcP[2];
-
-            // 这个点是否有右目匹配点
-            if(mCurrentFrame.mvuRight[i] < 0) // 说明是单目
-            {
-                Eigen::Vector2d Zp;
-                Zp[0] = mdCamProjMatrix(0,2) + eigcP[0] * invz * mdCamProjMatrix(0,0);
-                Zp[1] = mdCamProjMatrix(1,2) + eigcP[1] * invz * mdCamProjMatrix(1,1);
-                // 计算与真实观测之间的误差
-                const cv::KeyPoint &kpUn = mCurrentFrame.mvKeys[i];
-                Eigen::Matrix<double, 2, 1> obs;
-                obs<<kpUn.pt.x, kpUn.pt.y;
-                const float invSigma2 = mCurrentFrame.mvInvLevelSigma2[kpUn.octave];
-                Eigen::Matrix2d Info = Eigen::Matrix2d::Identity()*invSigma2;
-                Eigen::Vector2d error;
-                error = obs - Zp;
-                cout<<"静态单目点重投影误差:"<<error.dot(Info*error)<<endl; // 肯定小于5.991, 因为当作outlier去除了
-            }
-            else{
-                Eigen::Vector3d Zp;
-                Zp[0] = mdCamProjMatrix(0,2) + eigcP[0] * invz * mdCamProjMatrix(0,0);
-                Zp[1] = mdCamProjMatrix(1,2) + eigcP[1] * invz * mdCamProjMatrix(1,1);
-                Zp[2] = Zp[0] - mbf * invz;
-                // 计算与真实观测之间的误差
-                const cv::KeyPoint &kpUn = mCurrentFrame.mvKeys[i];
-                const float &kp_ur = mCurrentFrame.mvuRight[i];
-                Eigen::Matrix<double, 3, 1> obs;
-                obs<<kpUn.pt.x, kpUn.pt.y, kp_ur;
-                const float invSigma2 = mCurrentFrame.mvInvLevelSigma2[kpUn.octave];
-                Eigen::Matrix3d Info = Eigen::Matrix3d::Identity()*invSigma2;
-                Eigen::Vector3d error;
-                error = obs - Zp;
-                cout<<"静态双目点重投影误差:"<<error.dot(Info*error)<<endl; // 肯定是小于7.815, 因为当作outlier去除了
-            }
-        }
-    }
-
-
-
-    /// 12. 如果设置成onlyTracking模式 (要求的nmatches更多),??
     if(mbOnlyTracking)
     {
         mbVO = nmatchesMap<10;
@@ -3379,45 +3087,37 @@ bool Tracking::TrackWithMotionModel()
     return nmatchesMap>=10;
 }
 
-/// 对Local Map的MapPoints进行跟踪
 bool Tracking::TrackLocalMap()
 {
     // We have an estimation of the camera pose and some map points tracked in the frame.
     // We retrieve the local map and try to find matches to points in the local map.
 
-    /// 1. 更新局部关键帧mvpLocalKeyFrames和局部地图点mvpLocalMapPoints
     UpdateLocalMap();
-    /// 2. 在局部地图中查找与当前帧匹配的MapPoints
     SearchLocalPoints();
 
     // Optimize Pose
-    /// 4. 更新局部所有MapPoints后对位姿再次优化
     Optimizer::PoseOptimization(&mCurrentFrame);
     mnMatchesInliers = 0;
 
     // Update MapPoints Statistics
-    /// 5. 更新当前帧的MapPoints被观测程度，并统计跟踪局部地图的效果
     for(int i=0; i<mCurrentFrame.N; i++)
     {
         if(mCurrentFrame.mvpMapPoints[i])
         {
-            /// 5.1 遍历所有的静态landmark, 判断其outlier标志位
             if(!mCurrentFrame.mvbOutlier[i])
             {
-                /// 5.1.1 若不是outlier, 则增加一次观测次数
                 mCurrentFrame.mvpMapPoints[i]->IncreaseFound();
-                /// 5.1.2 判断目前模式
+
                 if(!mbOnlyTracking)
                 {
-                    // 该MapPoint被其它关键帧观测到过
+
                     if(mCurrentFrame.mvpMapPoints[i]->Observations()>0)
                         mnMatchesInliers++;
                 }
                 else
-                    // 记录当前帧跟踪到的MapPoints，用于统计跟踪效果
                     mnMatchesInliers++;
             }
-            else if(mSensor==System::STEREO) /// 5.1.1 若是outlier, 判断是否是双目, 是双目则直接从当前帧删除
+            else if(mSensor==System::STEREO)
                 mCurrentFrame.mvpMapPoints[i] = static_cast<MapPoint*>(NULL);
 
         }
@@ -3425,7 +3125,6 @@ bool Tracking::TrackLocalMap()
 
     // Decide if the tracking was succesful
     // More restrictive if there was a relocalization recently
-    /// 6. 决定是否跟踪成功, 才重定位不久同时inlier比较少,则false, 或则inlier太少返回false
     if(mCurrentFrame.mnId<mnLastRelocFrameId+mMaxFrames && mnMatchesInliers<50)
         return false;
 
@@ -3435,44 +3134,35 @@ bool Tracking::TrackLocalMap()
         return true;
 }
 
-/// 判断是否需要插入关键帧: 判断当前普通帧是否为关键帧
 bool Tracking::NeedNewKeyFrame()
 {
-    /// 1. 如果用户在界面上选择重定位，那么将不插入关键帧
-    /// 由于插入关键帧过程中会生成MapPoint，因此用户选择重定位后地图上的点云和关键帧都不会再增加
+
     if(mbOnlyTracking)
         return false;
 
     // If Local Mapping is freezed by a Loop Closure do not insert keyframes
-    /// 2. 如果局部地图被闭环检测使用，则不插入关键帧
-    if(mpLocalMapper->isStopped() || mpLocalMapper->stopRequested()) // 分别返回mbStopped 和 mbStopRequested信号
+    if(mpLocalMapper->isStopped() || mpLocalMapper->stopRequested())
         return false;
 
-    /// 3. ?????TODO
+
     const int nKFs = mpMap->KeyFramesInMap();
 
     // Do not insert keyframes if not enough frames have passed from last relocalisation
-    /// 4. 判断是否距离上一次插入关键帧的时间太短
-    /// mCurrentFrame.mnId是当前帧的ID, mnLastRelocFrameId是最近一次重定位帧的ID
-    /// mMaxFrames等于图像输入的频率,如果关键帧比较少，则考虑插入关键帧
-    /// 或距离上一次重定位超过1s，则考虑插入关键帧
     if(mCurrentFrame.mnId<mnLastRelocFrameId+mMaxFrames && nKFs>mMaxFrames) // 若距离上一次重定位不超过1s同时地图里有一定量的关键帧则跳过
         return false;
 
     // Tracked MapPoints in the reference keyframe
-    /// 5. 得到参考关键帧跟踪到的MapPoints数量
-    /// 在UpdateLocalKeyFrames函数中会将与当前关键帧共视程度最高的关键帧设定为当前帧的参考关键帧
+
     int nMinObs = 3;
     if(nKFs<=2)
         nMinObs=2;
-    int nRefMatches = mpReferenceKF->TrackedMapPoints(nMinObs); // 参考关键帧中的(被关键帧观测次数不少于nMinObs)地图点数量
+    int nRefMatches = mpReferenceKF->TrackedMapPoints(nMinObs);
 
     // Local Mapping accept keyframes?
-    /// 6. 查询局部地图管理器是否繁忙
     bool bLocalMappingIdle = mpLocalMapper->AcceptKeyFrames(); // 返回mbAcceptKeyFrames
 
     // Check how many "close" points are being tracked and how many could be potentially created.
-    /// 7. 对于双目或RGBD摄像头, 当前帧已有的地图点数量nTrackedClose, 和可以产生但还没有跟上的地图点数nNonTrackedClose
+
     int nNonTrackedClose = 0;
     int nTrackedClose= 0;
     if(mSensor!=System::MONOCULAR)
@@ -3492,50 +3182,41 @@ bool Tracking::NeedNewKeyFrame()
     bool bNeedToInsertClose = (nTrackedClose<100) && (nNonTrackedClose>70);// 已跟踪上的数量比较上, 还可以产生的比较多
 
     // Thresholds
-    /// 8. 决策是否需要插入关键帧
-    /// 8.1 设定inlier阈值, 和之前帧特征点匹配的inlier比例
+
     float thRefRatio = 0.75f;
     if(nKFs<2)
-        thRefRatio = 0.4f;///关键帧只有一帧，那么插入关键帧的阈值设置很低
-
+        thRefRatio = 0.4f;
     if(mSensor==System::MONOCULAR)
         thRefRatio = 0.9f;
 
     // Condition 1a: More than "MaxFrames" have passed from last keyframe insertion
-    /// 超过1s没有插入关键帧
     const bool c1a = mCurrentFrame.mnId>=mnLastKeyFrameId+mMaxFrames;
     // Condition 1b: More than "MinFrames" have passed and Local Mapping is idle
-    /// localMapper处于空闲状态
     const bool c1b = (mCurrentFrame.mnId>=mnLastKeyFrameId+mMinFrames && bLocalMappingIdle);
     //Condition 1c: tracking is weak
-    /// 跟踪要跪的节奏，0.25和0.3是一个比较低的阈值
     const bool c1c =  mSensor!=System::MONOCULAR && (mnMatchesInliers<nRefMatches*0.25 || bNeedToInsertClose) ; // inliers比较少, 或者可以进一步生成比较多地图点
     // Condition 2: Few tracked points compared to reference keyframe. Lots of visual odometry compared to map matches.
-    /// 阈值比c1c要高，与之前参考帧（最近的一个关键帧）重复度不是太高
     const bool c2 = ((mnMatchesInliers<nRefMatches*thRefRatio|| bNeedToInsertClose) && mnMatchesInliers>15);// c2?
 
     if((c1a||c1b||c1c)&&c2)
     {
         // If the mapping accepts keyframes, insert keyframe.
         // Otherwise send a signal to interrupt BA
-        if(bLocalMappingIdle) // 如果mbAcceptKeyFrames为true, 则这里为true
+        if(bLocalMappingIdle)
         {
             return true;
         }
         else
         {
-            mpLocalMapper->InterruptBA(); // 若mbAcceptKeyFrames为false, 则设置mbAbortBA为true, TODO 为什么不加锁?
+            mpLocalMapper->InterruptBA();
             if(mSensor!=System::MONOCULAR)
             {
-                /// 队列里不能阻塞太多关键帧
-                /// tracking插入关键帧不是直接插入，而且先插入到mlNewKeyFrames中，
-                /// 然后localmapper再逐个pop出来插入到mspKeyFrames
-                if(mpLocalMapper->KeyframesInQueue()<3) // 返回mlNewKeyFrames.size(), 双目的话, 队列里少于3个关键帧可以插入
+                if(mpLocalMapper->KeyframesInQueue()<3)
                     return true;
                 else
                     return false;
             }
-            else // 如果是单目, mbAcceptKeyFrames为false, 直接不准插入
+            else
                 return false;
         }
     }
@@ -3543,24 +3224,22 @@ bool Tracking::NeedNewKeyFrame()
         return false;
 }
 
-/// 创建新的关键帧, 对于非单目的情况，同时创建新的MapPoints
 void Tracking::CreateNewKeyFrame()
 {
     // TODO
-    if(!mpLocalMapper->SetNotStop(true)) // 如果mbStopped为真, 则这里直接返回false; 若mbStopped为假, 则mbNotStop=flag, 并且返回true
+    if(!mpLocalMapper->SetNotStop(true))
         return;
 
-    // 将当前帧构造成关键帧
     KeyFrame* pKF = new KeyFrame(mCurrentFrame,mpMap,mpKeyFrameDB);
     //cout<<endl<<BLUE<<"TODO:    created new keyframe!    "<<pKF->mnId<<"           total ID          "<<pKF->mnFrameId<<endl;
     cout<<WHITE<<endl;
-    mpReferenceKF = pKF;// 设置tracking中的参考关键帧为当前关键帧；当前普通帧的参考关键帧为当前关键帧
+    mpReferenceKF = pKF;
     mCurrentFrame.mpReferenceKF = pKF;
 
-    if(mSensor!=System::MONOCULAR)// 对于双目或rgbd摄像头, 为当前帧生成新的mappoints；与UpdateLastFrame中的那一部分代码功能相同
+    if(mSensor!=System::MONOCULAR)
     {
 
-        mCurrentFrame.UpdatePoseMatrices();// 因为前面优化只是更新了Tcw, 这里根据Tcw再更新mRcw, mtcw和mRwc、mOw
+        mCurrentFrame.UpdatePoseMatrices();
         // We sort points by the measured depth by the stereo/RGBD sensor.
         // We create all those MapPoints whose depth < mThDepth.
         // If there are less than 100 close points we create the 100 closest.
@@ -3576,12 +3255,12 @@ void Tracking::CreateNewKeyFrame()
         }
         if(!vDepthIdx.empty())
         {
-            sort(vDepthIdx.begin(),vDepthIdx.end());// 对vDepthIdx进行排序: 从小到大按深度
+            sort(vDepthIdx.begin(),vDepthIdx.end());
             int nPoints = 0;
             for(size_t j=0; j<vDepthIdx.size();j++)
             {
-                int i = vDepthIdx[j].second;// 遍历vDepthIdx中特征点id
-                bool bCreateNew = false;// 初始化标志位: bCreateNew
+                int i = vDepthIdx[j].second;
+                bool bCreateNew = false;
                 MapPoint* pMP = mCurrentFrame.mvpMapPoints[i];
                 if(!pMP)
                 {
@@ -3617,9 +3296,9 @@ void Tracking::CreateNewKeyFrame()
         }
         cout<<endl;
     }
-    mpLocalMapper->InsertKeyFrame(pKF);// 将当前关键帧插入mpLocalMapper类的mlNewKeyFrames队列
-    mpLocalMapper->SetNotStop(false); // 设置mbNotStop为false, 返回true TODO 有什么用???
-    mnLastKeyFrameId = mCurrentFrame.mnId;// 更新mnLastKeyFrameId, mpLastKeyFrame
+    mpLocalMapper->InsertKeyFrame(pKF);
+    mpLocalMapper->SetNotStop(false);
+    mnLastKeyFrameId = mCurrentFrame.mnId;
     mpLastKeyFrame = pKF;
 }
 
@@ -3633,7 +3312,7 @@ void Tracking::SearchLocalPoints()
         {
             if(pMP->isBad())
             {
-                *vit = static_cast<MapPoint*>(NULL); // 这个是什么意思
+                *vit = static_cast<MapPoint*>(NULL);
             }
             else
             {
@@ -3673,7 +3352,6 @@ void Tracking::SearchLocalPoints()
         if(mCurrentFrame.mnId<mnLastRelocFrameId+2)
             th=5;
         int nStaticTracks = matcher.SearchByProjection(mCurrentFrame,mvpLocalMapPoints,th);
-        //cout<<"静态跟踪局部地图3D点数: "<<nStaticTracks<<endl;
     }
 }
 
@@ -3681,14 +3359,14 @@ void Tracking::SearchLocalPoints()
 void Tracking::UpdateLocalMap()
 {
     // This is for visualization
-    mpMap->SetReferenceMapPoints(mvpLocalMapPoints);//局部地图的mappoint, 画图时画成不同颜色
+    mpMap->SetReferenceMapPoints(mvpLocalMapPoints);
 
     // Update
-    UpdateLocalKeyFrames();//更新局部关键帧, 这里不改
-    UpdateLocalPoints();//更新局部地图点, 如果有动态点也更新局部动态地图点.
+    UpdateLocalKeyFrames();
+    UpdateLocalPoints();
 }
 
-void Tracking::UpdateLocalPoints()//更新局部地图点, 如果有动态点也更新局部动态地图点.
+void Tracking::UpdateLocalPoints()
 {
     mvpLocalMapPoints.clear();
 
@@ -3711,7 +3389,6 @@ void Tracking::UpdateLocalPoints()//更新局部地图点, 如果有动态点也
             }
         }
     }
-    //cout<<"静态局部3D点数量: "<<mvpLocalMapPoints.size()<<endl;
 }
 
 
@@ -3819,7 +3496,7 @@ void Tracking::UpdateLocalKeyFrames()
         mpReferenceKF = pKFmax;
         mCurrentFrame.mpReferenceKF = mpReferenceKF;
     }
-    //cout<<"静态局部关键帧数量: "<<mvpLocalKeyFrames.size()<<endl;
+
 }
 
 bool Tracking::Relocalization()

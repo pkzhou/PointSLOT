@@ -43,7 +43,7 @@ mnBALocalForKF(0), mnBAFixedForKF(0), mbFirstConnection(true),  mpParent(NULL), 
 
     mpMapObjects = pMO;
     mpDetectionObject = pDetObj;
-    g2o::SE3Quat x = pMO->GetCFInFrameObjState(pFrame.mnId).pose; // 设置状态, 注意输入Tco
+    g2o::SE3Quat x = pMO->GetCFInFrameObjState(pFrame.mnId).pose;
     SetPose(x);
     mScale = pMO->GetCFInFrameObjState(pFrame.mnId).scale;
 
@@ -66,7 +66,7 @@ mnBALocalForKF(0), mnBAFixedForKF(0), mbFirstConnection(true),  mpParent(NULL), 
 }
 
 
-void ObjectKeyFrame::SetPose(const g2o::SE3Quat &cObjPose) // 要求输入的是Tco, 目标到camera的变换
+void ObjectKeyFrame::SetPose(const g2o::SE3Quat &cObjPose)
 {
     unique_lock<mutex> lock(mMutexPose);
     mTco = Converter::toCvMat(cObjPose);
@@ -111,7 +111,6 @@ vector<MapObjectPoint*> ObjectKeyFrame::GetMapObjectPointMatches()
     return mvpMapObjectPoints;
 }
 
-// 按照权重排序
 void ObjectKeyFrame::UpdateBestCovisibles()
 {
     unique_lock<mutex> lock(mMutexConnections);
@@ -157,46 +156,45 @@ void ObjectKeyFrame::SetBadFlag()
 {
     {
         unique_lock<mutex> lock(mMutexConnections);
-        if(mbFirstObserved == true)// 首帧图像直接返回
+        if(mbFirstObserved == true)
             return;
-        else if(mbNotErase)// TODO ?? 干嘛的
+        else if(mbNotErase)
         {
             mbToBeErased = true;
             return;
         }
     }
-    // 删除共视关键帧们与自己的联系(即共视的权重等)
     for(map<ObjectKeyFrame*,int>::iterator mit = mConnectedKeyFrameWeights.begin(), mend=mConnectedKeyFrameWeights.end(); mit!=mend; mit++)
         mit->first->EraseConnection(this);
-    // 删除自己观测的地图点与自己的联系(即从地图点的观测中抹去自己)
+
     for(size_t i=0; i<mvpMapObjectPoints.size(); i++)
         if(mvpMapObjectPoints[i])
             mvpMapObjectPoints[i]->EraseObservation(this);
     {
         unique_lock<mutex> lock(mMutexConnections);
         unique_lock<mutex> lock1(mMutexFeatures);
-        mConnectedKeyFrameWeights.clear();// 清空自己与其它共视关键帧之间的联系
+        mConnectedKeyFrameWeights.clear();
         mvpOrderedConnectedKeyFrames.clear();
         set<ObjectKeyFrame*> sParentCandidates;
         sParentCandidates.insert(mpParent);
-        // 为自己的子关键帧,找新的父关键帧
+
         while(!mspChildrens.empty())
         {
             bool bContinue = false;
             int max = -1;
             ObjectKeyFrame* pC;
             ObjectKeyFrame* pP;
-            for(set<ObjectKeyFrame*>::iterator sit=mspChildrens.begin(), send=mspChildrens.end(); sit!=send; sit++)// 遍历每一个子关键帧，让它们更新它们指向的父关键帧
+            for(set<ObjectKeyFrame*>::iterator sit=mspChildrens.begin(), send=mspChildrens.end(); sit!=send; sit++)
             {
                 ObjectKeyFrame* pKF = *sit;
                 if(pKF->isBad())
                     continue;
-                vector<ObjectKeyFrame*> vpConnected = pKF->GetVectorCovisibleKeyFrames();// 子关键帧遍历每一个它的共视关键帧
+                vector<ObjectKeyFrame*> vpConnected = pKF->GetVectorCovisibleKeyFrames();
                 for(size_t i=0, iend=vpConnected.size(); i<iend; i++)
                 {
                     for(set<ObjectKeyFrame*>::iterator spcit=sParentCandidates.begin(), spcend=sParentCandidates.end(); spcit!=spcend; spcit++)
                     {
-                        if(*spcit == NULL) /// 可能有问题
+                        if(*spcit == NULL)
                             continue;
                         if(vpConnected[i]->mnId == (*spcit)->mnId)
                         {
@@ -214,27 +212,25 @@ void ObjectKeyFrame::SetBadFlag()
             }
             if(bContinue)
             {
-                pC->ChangeParent(pP);// 因为父节点死了，并且子节点找到了新的父节点，子节点更新自己的父节点
-                sParentCandidates.insert(pC);// 因为子节点找到了新的父节点并更新了父节点，那么该子节点升级，作为其它子节点的备选父节点
-                mspChildrens.erase(pC);// 该子节点处理完毕
+                pC->ChangeParent(pP);
+                sParentCandidates.insert(pC);
+                mspChildrens.erase(pC);
             }
             else
                 break;
         }
-        // 如果还有子节点没有找到新的父节点
+
         if(!mspChildrens.empty())
             for(set<ObjectKeyFrame*>::iterator sit=mspChildrens.begin(); sit!=mspChildrens.end(); sit++)
             {
-                (*sit)->ChangeParent(mpParent);// 直接把父节点的父节点作为自己的父节点
+                (*sit)->ChangeParent(mpParent);
             }
         mpParent->EraseChild(this);
-        // 自己此时(目标在相机系下的位姿) * 父关键帧时刻(相机在目标系下的位姿) 这能得到一个什么东西?
+
         // mTcp = mTco*mpParent->GetPoseInverse();
         mbBad = true;
     }
-    // 地图中删除该关键帧
     // mpMap->EraseKeyFrame(this);
-    // BoW删除该关键帧
     // mpKeyFrameDB->erase(this);
 }
 
@@ -271,14 +267,14 @@ void ObjectKeyFrame::AddConnection(ObjectKeyFrame *pKF, const int &weight)
 {
     {
         unique_lock<mutex> lock(mMutexConnections);
-        if(!mConnectedKeyFrameWeights.count(pKF)) // 如果本关键帧的共视关键帧没有pKF, 就加进去
+        if(!mConnectedKeyFrameWeights.count(pKF))
             mConnectedKeyFrameWeights[pKF]=weight;
         else if(mConnectedKeyFrameWeights[pKF]!=weight)
-            mConnectedKeyFrameWeights[pKF]=weight; // 不同则更新
+            mConnectedKeyFrameWeights[pKF]=weight;
         else
             return;
     }
-    UpdateBestCovisibles(); // 需要重新排序
+    UpdateBestCovisibles();
 }
 
 
@@ -304,21 +300,21 @@ ObjectKeyFrame* ObjectKeyFrame::GetParent()
 void ObjectKeyFrame::UpdateConnections()
 {
     map<ObjectKeyFrame*,int> KFcounter;
-    vector<MapObjectPoint*> vpMP; // 当前关键帧所有目标地图点先存起来
+    vector<MapObjectPoint*> vpMP;
     {
         unique_lock<mutex> lockMPs(mMutexFeatures);
         vpMP = mvpMapObjectPoints;
     }
 
-    for(vector<MapObjectPoint*>::iterator vit=vpMP.begin(), vend=vpMP.end(); vit!=vend; vit++) // 找出来也观测到自己帧地图点关键帧, 并统计他们观测到(和自己帧)相同点的数量
+    for(vector<MapObjectPoint*>::iterator vit=vpMP.begin(), vend=vpMP.end(); vit!=vend; vit++)
     {
         MapObjectPoint* pMP = *vit;
         if(!pMP)
             continue;
-        if(pMP->isBad()) // 判断点是不是坏的
+        if(pMP->isBad())
             continue;
 
-        map<ObjectKeyFrame*,size_t> observations = pMP->GetObservations(); //该点的所有观测, 第二个是索引
+        map<ObjectKeyFrame*,size_t> observations = pMP->GetObservations();
         for(map<ObjectKeyFrame*,size_t>::iterator mit=observations.begin(), mend=observations.end(); mit!=mend; mit++)
         {
             if(mit->first->mnId==mnId)
@@ -336,28 +332,28 @@ void ObjectKeyFrame::UpdateConnections()
     vPairs.reserve(KFcounter.size());
     for(map<ObjectKeyFrame*,int>::iterator mit=KFcounter.begin(), mend=KFcounter.end(); mit!=mend; mit++)
     {
-        if(mit->second>nmax) // 找到最佳共视关键帧与(同地图点)数量
+        if(mit->second>nmax)
         {
             nmax=mit->second;
             pKFmax=mit->first;
         }
-        if(mit->second>=th) // 如果共视程度大于阈值, 则更新共视帧和本帧之间的权重
+        if(mit->second>=th)
         {
             vPairs.push_back(make_pair(mit->second,mit->first));
             (mit->first)->AddConnection(this,mit->second);
         }
     }
 
-    if(vPairs.empty()) // 如果前面共视程度均小于阈值,就只更新最多共视的那帧与自己的权重
+    if(vPairs.empty())
     {
         vPairs.push_back(make_pair(nmax,pKFmax));
         pKFmax->AddConnection(this,nmax);
     }
 
-    sort(vPairs.begin(),vPairs.end());// 满足阈值的关键帧,按照共视点数排序
+    sort(vPairs.begin(),vPairs.end());
     list<ObjectKeyFrame*> lKFs;
     list<int> lWs;
-    for(size_t i=0; i<vPairs.size();i++) // 权重与关键帧分开
+    for(size_t i=0; i<vPairs.size();i++)
     {
         lKFs.push_front(vPairs[i].second);
         lWs.push_front(vPairs[i].first);
@@ -365,13 +361,13 @@ void ObjectKeyFrame::UpdateConnections()
 
     {
         unique_lock<mutex> lockCon(mMutexConnections);
-        mConnectedKeyFrameWeights = KFcounter; // 本帧所有的共视关键帧与对应权重(即相同目标点数)
-        mvpOrderedConnectedKeyFrames = vector<ObjectKeyFrame*>(lKFs.begin(),lKFs.end()); // 本帧所有超过阈值的共视关键帧(已经排好序了)
-        mvOrderedWeights = vector<int>(lWs.begin(), lWs.end()); // 本帧所有超过阈值的共视关键帧的权重
+        mConnectedKeyFrameWeights = KFcounter;
+        mvpOrderedConnectedKeyFrames = vector<ObjectKeyFrame*>(lKFs.begin(),lKFs.end());
+        mvOrderedWeights = vector<int>(lWs.begin(), lWs.end());
 
-        if(mbFirstConnection && !mbFirstObserved) // ??
+        if(mbFirstConnection && !mbFirstObserved)
         {
-            mpParent = mvpOrderedConnectedKeyFrames.front();// 父关键帧 = (与本关键帧)权重最大的关键帧, TODO 为什么只执行一次
+            mpParent = mvpOrderedConnectedKeyFrames.front();
             mpParent->AddChild(this);
             mbFirstConnection = false;
         }

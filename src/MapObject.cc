@@ -129,7 +129,7 @@ g2o::ObjectState MapObject::GetInFrameObjState(const int &frame_id)
     }
     else
     {
-        cout<<"该帧没有观测到该object！"<<endl;
+        cout<<"The object is not observed in this frame!"<<endl;
         assert(0);
     }
     return cuboid_temp;
@@ -145,7 +145,7 @@ g2o::ObjectState MapObject::GetCFInFrameObjState(const int &frame_id)
     }
     else
     {
-        cout<<"该帧没有观测到该object！"<<endl;
+        cout<<"The object is not observed in this frame!"<<endl;
         assert(0);
     }
     return cuboid_temp;
@@ -163,7 +163,7 @@ Vector6d MapObject::GetInFrameObjVelocity(const int &frame_id)
     }
     else
     {
-        cout<<"该帧没有观测到该object！"<<endl;
+        cout<<"The object is not observed in this frame!"<<endl;
         assert(0);
     }
 
@@ -193,11 +193,11 @@ void MapObject::UpdateVelocity(const long unsigned int &nCurrentFrameId)
     double dDT = EdT*(nCurrentFrameId - nLatestFrameId);
     if(dDT<EdMaxObjMissingDt)
     {
-        // 当前帧pose和上一帧pose计算位姿变换
+
         g2o::SE3Quat Twl = cInFrameLatestObjState.pose;
         g2o::SE3Quat Twc = cInCurrentFrameObjState.pose;
         g2o::SE3Quat Tlc = Twl.inverse() * Twc;
-        // 计算角速度和线速度
+
         double deltaT = dDT;
         Eigen::Vector3d AngularVelocity = Tlc.log().head(3)/deltaT;
         Eigen::Vector3d LinearVeclocity = Tlc.translation()/deltaT;
@@ -206,7 +206,7 @@ void MapObject::UpdateVelocity(const long unsigned int &nCurrentFrameId)
         velTmp.tail(3) = LinearVeclocity;
 
         mVirtualVelocity = velTmp;
-        // 初始化当前帧和之前一帧（目标）的速度
+
         if(mbVelInit)
         {
             mmInAllFrameVelocity[nCurrentFrameId] = velTmp;
@@ -217,7 +217,7 @@ void MapObject::UpdateVelocity(const long unsigned int &nCurrentFrameId)
             mbVelInit = true;
         }
     }
-    // 如果超过了时间阈值, 就不用管, 设置速度为0
+
     else{
         mbVelInit = false;
         mmInAllFrameVelocity[nCurrentFrameId] = Vector6d::Zero();
@@ -243,21 +243,21 @@ void MapObject::UpdateCFVelocity(const long unsigned int &nCurrentFrameId, cv::M
 
     if(dDT<EdMaxObjMissingDt)
     {
-        // 当前帧pose和上一帧pose计算位姿变换
+
         g2o::SE3Quat Tlo1 = cInFrameLatestObjState.pose;
         g2o::SE3Quat Tco2 = cInCurrentFrameObjState.pose;
-        // 在世界系下的位姿变换
+
         g2o::SE3Quat Tlc = Tlo1.inverse() * Converter::toSE3Quat(camera_Tcl).inverse() * Tco2;
-        // 计算角速度和线速度
+
         double deltaT = dDT;
         Eigen::Vector3d AngularVelocity = Tlc.log().head(3)/deltaT;
         Eigen::Vector3d LinearVeclocity = Tlc.translation()/deltaT;
         Vector6d velTmp;
         velTmp.head(3) = AngularVelocity;
         velTmp.tail(3) = LinearVeclocity;
-        mVirtualVelocity = velTmp; // 初始化速度
+        mVirtualVelocity = velTmp;
     }
-    else{// 如果超过了时间阈值, 就不用管, 设置速度为0
+    else{
         mVirtualVelocity = Vector6d::Zero();
     }
 }
@@ -385,7 +385,6 @@ void MapObject::EraseInFrameObjState(const long unsigned int &nFrameId)
         mmInAllFrameStates.erase(nFrameId);
 }
 
-//TODO 针对于keyframe的相关函数
 void MapObject::SetHaveBeenOptimizedInKeyFrameFlag()
 {
     unique_lock<mutex> lock(mMutexforoptimized);
@@ -411,14 +410,13 @@ void MapObject::SetInKeyFrameObjState(const g2o::ObjectState &Pos, KeyFrame* pKF
     unique_lock<mutex> lock(mMutexPos);
     mmInAllKeyFrameStates[pKF] = make_pair(Pos, true);
 }
-// 检测MapObject动态性是否固定
+
 void MapObject::DynamicDetection(const bool &bDynFlag){
     if (!mbDynamicChanged) {
-        mqbHistoricalDynafFlag.push(bDynFlag);  //每个循环把bDynFlag压入队列mqbHistoricalDynafFlag末尾
+        mqbHistoricalDynafFlag.push(bDynFlag);
         if (mqbHistoricalDynafFlag.size()<4)
             return;
-        //如果长度大于QUEUE_LENGTH就删掉队列首元素
-        //连续三次动态观测一致，则固定该状态
+
         if (mqbHistoricalDynafFlag.size() > 4) {
             mqbHistoricalDynafFlag.pop();
         }

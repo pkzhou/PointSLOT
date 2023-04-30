@@ -69,7 +69,7 @@ int ORBmatcher::SearchByProjection(Frame &F, const vector<MapPoint*> &vpMapPoint
 {
     int nmatches=0;
 
-    const bool bFactor = th!=1.0;// th不为1.0的话, bFactor为真, 搜索半径就乘以th这个倍数得到新的搜索半径
+    const bool bFactor = th!=1.0;
     int t1 =0,t2 =0,t3 =0,t4 =0,t5 =0;//,t6 =0;
     for(size_t iMP=0; iMP<vpMapPoints.size(); iMP++)
     {
@@ -159,28 +159,26 @@ int ORBmatcher::SearchByProjection(Frame &F, const size_t &nOrder, const vector<
     if(F.mvDetectionObjects[nOrder]==NULL)
         assert(0);
 
-    // TODO 为什么跟踪的点如此的少, 描述子距离为什么这么大???  58 跟踪6个
-
 
     int nmatches=0;
-    const bool bFactor = th!=1.0;// th不为1.0的话, bFactor为真, 搜索半径就乘以th这个倍数得到新的搜索半径
+    const bool bFactor = th!=1.0;
     int t1 =0,t2 =0,t3 =0,t4 =0,t5 =0;//t6 =0;
     for(size_t iMP=0; iMP<vpMapPoints.size(); iMP++)
     {
         MapObjectPoint* pMP = vpMapPoints[iMP];
-        if(!pMP->mbTrackInView) // 被标记点和不在视野中的调过
+        if(!pMP->mbTrackInView)
             continue;
         t1++;
         if(pMP->isBad())
             continue;
         t2++;
-        const int &nPredictedLevel = pMP->mnTrackScaleLevel; // 决定搜索半径r
+        const int &nPredictedLevel = pMP->mnTrackScaleLevel;
         float r = RadiusByViewingCos(pMP->mTrackViewCos);
         if(bFactor)
             r*=th;
         //const vector<size_t> vIndices = F.GetObjectFeaturesInArea(nOrder, 50, pMP->mTrackProjX,pMP->mTrackProjY,r*F.mvScaleFactors[nPredictedLevel],nPredictedLevel-1,nPredictedLevel);
         //const vector<size_t> vIndices = F.GetObjectFeaturesInArea(nOrder, 50, pMP->mTrackProjX,pMP->mTrackProjY,20,nPredictedLevel-1,nPredictedLevel);
-        //cout<<pMP->mnId<<" 绝:"<<pMP->mTrackProjX<<" "<<pMP->mTrackProjY<<endl;
+        //cout<<pMP->mnId<<" :"<<pMP->mTrackProjX<<" "<<pMP->mTrackProjY<<endl;
         const vector<size_t> vIndices = F.GetObjectFeaturesInArea(nOrder, 50, pMP->mTrackProjX,pMP->mTrackProjY,5,nPredictedLevel-1,nPredictedLevel+1);
 
         if(vIndices.empty()) // 找到pMP投影点附近的点
@@ -203,22 +201,22 @@ int ORBmatcher::SearchByProjection(Frame &F, const size_t &nOrder, const vector<
         for(vector<size_t>::const_iterator vit=vIndices.begin(), vend=vIndices.end(); vit!=vend; vit++)// Get best and second matches with near keypoints
         {
             const size_t idx = *vit;
-            //cout<<"序号2: "<<idx<<endl;
-            if(!F.isInBBox(nOrder, F.mvObjKeysUn[nOrder][idx].pt.x, F.mvObjKeysUn[nOrder][idx].pt.y)) // 匹配点要在方框中
+
+            if(!F.isInBBox(nOrder, F.mvObjKeysUn[nOrder][idx].pt.x, F.mvObjKeysUn[nOrder][idx].pt.y))
                 continue;
 
-            if(F.mvpMapObjectPoints[nOrder][idx]) // 匹配点已经有一个比较好的地图点也跳过
+            if(F.mvpMapObjectPoints[nOrder][idx])
                 if(F.mvpMapObjectPoints[nOrder][idx]->Observations()>0)
                     continue;
 
-            if(F.mvuObjKeysRight[nOrder][idx]>0) // 匹配点的右观测也要满足pMP的尺度
+            if(F.mvuObjKeysRight[nOrder][idx]>0)
             {
                 const float er = fabs(pMP->mTrackProjXR-F.mvuObjKeysRight[nOrder][idx]);
                 if(er>r*F.mvScaleFactors[nPredictedLevel])
                     continue;
             }
 
-            const cv::Mat &d = F.mvObjPointsDescriptors[nOrder].row(idx); // 最大最小描述子距离及对应的尺度
+            const cv::Mat &d = F.mvObjPointsDescriptors[nOrder].row(idx);
             const int dist = DescriptorDistance(MPdescriptor,d);
             if(dist<bestDist)
             {
@@ -234,7 +232,7 @@ int ORBmatcher::SearchByProjection(Frame &F, const size_t &nOrder, const vector<
                 bestDist2=dist;
             }
         }
-        //cout<<"最佳距离: "<<bestDist<<endl;
+
         if(bestDist<=TH_HIGH_FORDYNAMIC)// Apply ratio to second match (only if best and second are in the same scale level)
         {
             t4++;
@@ -245,7 +243,7 @@ int ORBmatcher::SearchByProjection(Frame &F, const size_t &nOrder, const vector<
             nmatches++;
         }
     }
-    //cout<<"目标局部3D跟踪测试: "<<t1<<" "<<t2<<" "<<t3<<" "<<t4<<" "<<t5<<endl;
+
     return nmatches;
 }
 
@@ -1006,7 +1004,7 @@ int ORBmatcher::Fuse(KeyFrame *pKF, const vector<MapPoint *> &vpMapPoints, const
             continue;
         t1++;
 
-        if(pMP->isBad() || pMP->IsInKeyFrame(pKF)) // 该点的观测是否包括该关键帧
+        if(pMP->isBad() || pMP->IsInKeyFrame(pKF))
             continue;
         t2++;
         cv::Mat p3Dw;
@@ -1032,8 +1030,8 @@ int ORBmatcher::Fuse(KeyFrame *pKF, const vector<MapPoint *> &vpMapPoints, const
         t4++;
         const float ur = u-bf*invz;
 
-        const float maxDistance = pMP->GetMaxDistanceInvariance(); // 得到最远距离
-        const float minDistance = pMP->GetMinDistanceInvariance(); // 得到最近距离?
+        const float maxDistance = pMP->GetMaxDistanceInvariance();
+        const float minDistance = pMP->GetMinDistanceInvariance();
         cv::Mat PO = p3Dw-Ow;
         const float dist3D = cv::norm(PO);
 
@@ -1042,7 +1040,7 @@ int ORBmatcher::Fuse(KeyFrame *pKF, const vector<MapPoint *> &vpMapPoints, const
             continue;
         t5++;
         // Viewing angle must be less than 60 deg
-        cv::Mat Pn = pMP->GetNormal(); // view angle也不懂
+        cv::Mat Pn = pMP->GetNormal(); // view angle
 
         if(PO.dot(Pn)<0.5*dist3D)
             continue;
@@ -1101,7 +1099,7 @@ int ORBmatcher::Fuse(KeyFrame *pKF, const vector<MapPoint *> &vpMapPoints, const
 
             const cv::Mat &dKF = pKF->mDescriptors.row(idx);
 
-            const int dist = DescriptorDistance(dMP,dKF); // 找到描述子距离最匹配的
+            const int dist = DescriptorDistance(dMP,dKF);
 
             if(dist<bestDist)
             {
@@ -1119,7 +1117,7 @@ int ORBmatcher::Fuse(KeyFrame *pKF, const vector<MapPoint *> &vpMapPoints, const
             {
                 if(!pMPinKF->isBad())
                 {
-                    if(pMPinKF->Observations()>pMP->Observations()) // 根据哪个点的观测更多, 留哪一个
+                    if(pMPinKF->Observations()>pMP->Observations())
                         pMP->Replace(pMPinKF);
                     else
                         pMPinKF->Replace(pMP);
@@ -1133,13 +1131,13 @@ int ORBmatcher::Fuse(KeyFrame *pKF, const vector<MapPoint *> &vpMapPoints, const
             nFused++;
         }
     }
-    //cout<<"Fuse静态测试: 关键帧"<<pKF->mnFrameId<<" "<<vpMapPoints.size()<<" "<<t1<<" "<<t2<<" "<<t3<<" "<<t4<<" "<<t5<<" "<<t6<<" "<<t7<<" "<<t8<<endl;
+
     return nFused;
 }
 
 int ORBmatcher::Fuse(ObjectKeyFrame *pKF, const vector<MapObjectPoint *> &vpMapPoints, const float th)
 {
-    cv::Mat Rco = pKF->GetRotation(); // 得到当前帧的目标相机系下的pose
+    cv::Mat Rco = pKF->GetRotation();
     cv::Mat tco = pKF->GetTranslation();
     cv::Mat Poc = pKF->GetCameraCenter();
     const float &fx = pKF->fx;
@@ -1158,12 +1156,12 @@ int ORBmatcher::Fuse(ObjectKeyFrame *pKF, const vector<MapObjectPoint *> &vpMapP
         if(!pMP)
             continue;
         t1++;
-        if(pMP->isBad() || pMP->IsInKeyFrame(pKF)) // 该点的观测是否包括该关键帧
+        if(pMP->isBad() || pMP->IsInKeyFrame(pKF))
             continue;
         t2++;
         cv::Mat Poj = pMP->GetInObjFramePosition();
         cv::Mat Pcj = Rco * Poj + tco;
-        if(Pcj.at<float>(2)<0.0f) // 相机系位置需要为正
+        if(Pcj.at<float>(2)<0.0f)
             continue;
         t3++;
         const float invz = 1/Pcj.at<float>(2);
@@ -1171,28 +1169,28 @@ int ORBmatcher::Fuse(ObjectKeyFrame *pKF, const vector<MapObjectPoint *> &vpMapP
         const float y = Pcj.at<float>(1)*invz;
         const float u = fx*x+cx;
         const float v = fy*y+cy;
-        const float ur = u-bf*invz;// 得到右图的投影点,有什么用
-        if(!pKF->IsInBBox(u, v))// 该点是否在目标的2D框里面
+        const float ur = u-bf*invz;
+        if(!pKF->IsInBBox(u, v))
              continue;
         t4++;
-        cv::Mat oPcj = Poj-Poc; // 该点与相机之间的距离
-        const float dist3D = cv::norm(oPcj); // 应该dist3D = cv::norm(cPcj)同样成立
-        const float maxDistance = pMP->GetMaxDistanceInvariance(); // 得到最远距离
-        const float minDistance = pMP->GetMinDistanceInvariance(); // 得到最近距离?
-        if(dist3D<minDistance || dist3D>maxDistance ) // 距离需要在尺度范围内
+        cv::Mat oPcj = Poj-Poc;
+        const float dist3D = cv::norm(oPcj);
+        const float maxDistance = pMP->GetMaxDistanceInvariance();
+        const float minDistance = pMP->GetMinDistanceInvariance();
+        if(dist3D<minDistance || dist3D>maxDistance )
             continue;
         t5++;
-        cv::Mat Pn = pMP->GetNormal(); // Viewing angle must be less than 60 deg, TODO 注意这个方向是在目标系下
+        cv::Mat Pn = pMP->GetNormal(); // Viewing angle must be less than 60 deg
         if(oPcj.dot(Pn)<0.5*dist3D)
             continue;
         t6++;
-        int nPredictedLevel = pMP->PredictScale(dist3D,pKF); // 预测尺度
-        const float radius = th*pKF->mvScaleFactors[nPredictedLevel]; // 确定搜索半径
-        const vector<size_t> vIndices = pKF->GetObjectFeaturesInArea(u,v,radius); // 然后在投影范围找可能的点
+        int nPredictedLevel = pMP->PredictScale(dist3D,pKF);
+        const float radius = th*pKF->mvScaleFactors[nPredictedLevel];
+        const vector<size_t> vIndices = pKF->GetObjectFeaturesInArea(u,v,radius);
         if(vIndices.empty())
             continue;
         t7++;
-        const cv::Mat dMP = pMP->GetDescriptor();// 描述子匹配
+        const cv::Mat dMP = pMP->GetDescriptor();
         int bestDist = 256;
         int bestIdx = -1;
         for(vector<size_t>::const_iterator vit=vIndices.begin(), vend=vIndices.end(); vit!=vend; vit++)
@@ -1200,9 +1198,9 @@ int ORBmatcher::Fuse(ObjectKeyFrame *pKF, const vector<MapObjectPoint *> &vpMapP
             const size_t idx = *vit;
             const cv::KeyPoint &kp = pKF->mvObjKeysUn[idx];
             const int &kpLevel= kp.octave;
-            if(kpLevel<nPredictedLevel-1 || kpLevel>nPredictedLevel) // 如果与预测尺度相差较大
+            if(kpLevel<nPredictedLevel-1 || kpLevel>nPredictedLevel)
                 continue;
-            if(pKF->mvuObjKeysRight[idx]>=0) // 双目点
+            if(pKF->mvuObjKeysRight[idx]>=0)
             {
                 const float &kpx = kp.pt.x;
                 const float &kpy = kp.pt.y;
@@ -1211,7 +1209,7 @@ int ORBmatcher::Fuse(ObjectKeyFrame *pKF, const vector<MapObjectPoint *> &vpMapP
                 const float ey = v-kpy;
                 const float er = ur-kpr;
                 const float e2 = ex*ex+ey*ey+er*er;
-                if(e2*pKF->mvInvLevelSigma2[kpLevel]>7.8) // 比较下带信息矩阵的重投影误差有多大
+                if(e2*pKF->mvInvLevelSigma2[kpLevel]>7.8)
                     continue;
             }
             else // 单目点
@@ -1225,7 +1223,7 @@ int ORBmatcher::Fuse(ObjectKeyFrame *pKF, const vector<MapObjectPoint *> &vpMapP
                     continue;
             }
             const cv::Mat &dKF = pKF->mDescriptors.row(idx);
-            const int dist = DescriptorDistance(dMP,dKF); // 找到描述子距离最匹配的点
+            const int dist = DescriptorDistance(dMP,dKF);
             if(dist<bestDist)
             {
                 bestDist = dist;
@@ -1233,30 +1231,29 @@ int ORBmatcher::Fuse(ObjectKeyFrame *pKF, const vector<MapObjectPoint *> &vpMapP
             }
         }
 
-        if(bestDist<=TH_LOW) // 找到了这样满足条件的点
+        if(bestDist<=TH_LOW)
         {
             t8++;
-            MapObjectPoint* pMPinKF = pKF->GetMapObjectPoint(bestIdx); // 取出那个点
-            if(pMPinKF) // 若点已经存在
+            MapObjectPoint* pMPinKF = pKF->GetMapObjectPoint(bestIdx);
+            if(pMPinKF)
             {
-                if(!pMPinKF->isBad()) // 判断点是好是坏
+                if(!pMPinKF->isBad())
                 {
-                    if(pMPinKF->Observations()>pMP->Observations()) // 根据哪个点的观测更多, 留哪一个
+                    if(pMPinKF->Observations()>pMP->Observations())
                         pMP->Replace(pMPinKF);
                     else
                         pMPinKF->Replace(pMP);
                 }
             }
-            else // 若点还不存在
+            else
             {
-                pMP->AddObservation(pKF,bestIdx); // 给点加观测
+                pMP->AddObservation(pKF,bestIdx);
                 pKF->AddMapObjectPoint(pMP,bestIdx);
             }
             nFused++;
         }
     }
-    //cout<<"Fuse目标3D点测试: 关键帧"<<pKF->mnFrameId<<" "<<nMPs<<" "<<t1<<" "<<t2<<" "<<t3<<" "<<t4<<" "<<t5<<" "<<t6<<" "<<t7<<" "<<t8<<endl;
-    return nFused;
+        return nFused;
 }
 
 
@@ -1758,16 +1755,10 @@ int ORBmatcher::SearchByProjection(Frame &CurrentFrame, const Frame &LastFrame, 
     return nmatches;
 }
 
-//TODO 为啥不计算描述子来计算,我觉得还可以计算描述子距离直接匹配.
-/// 思路： 首先利用LK光流预测上一帧的目标ORB特征点在当前关键帧的像素位置，
-/// 然后在该像素位置的附近搜索最匹配（距离最近）的（当前帧提取的）目标ORB特征点，
-/// 然后若上一帧的目标特征点对应存在目标landmark，则顺势将此landmark赋给当前帧。该方法依赖于LK光流的精度，
-/// 以及前后两帧是否都提取到了同一ORB特征点，若两帧的提取前后不一致，则也匹配不成功
 void ORBmatcher::SearchByOpticalFlowTracking(const Frame &LastFrame,  const int &th, Frame &CurrentFrame, vector<int> &vnAllObjMatchesNum)
 {
     if (LastFrame.mRawImg.rows == 0 || LastFrame.mRawImg.cols == 0)
     {
-        cout<<"上一帧没有图像？"<<endl;
         exit(1);
     }
     //bool bTrack = false;
@@ -1827,13 +1818,13 @@ void ORBmatcher::SearchByOpticalFlowTracking(const Frame &LastFrame,  const int 
         float mean_move_norm = sqrt(fObjMeanDeltaX * fObjMeanDeltaX + fObjMeanDeltaY * fObjMeanDeltaY);
         fObjMeanDeltaNorm = mean_move_norm;
         fObjMeanDeltaX /= mean_move_norm;
-        fObjMeanDeltaY /= mean_move_norm;// 归一化， 平均移动方向
+        fObjMeanDeltaY /= mean_move_norm;
 
         for (size_t i = 0; i < status.size(); i++)
         {
             if (status[i])
             {
-                /// 2.8.1 计算匹配点的移动方向: direct_x, direct_y, 移动距离: move_norm
+
                 float direct_x = vCurrentPointPts[i].x - vLastPointPts[i].x;
                 float direct_y = vCurrentPointPts[i].y - vLastPointPts[i].y;
                 float move_norm = sqrt(direct_x * direct_x + direct_y * direct_y);
@@ -1841,12 +1832,10 @@ void ORBmatcher::SearchByOpticalFlowTracking(const Frame &LastFrame,  const int 
                 direct_y /= move_norm;
 
                 // if mean_flow is very small, comparing angle is meaningless.
-                /// 2.8.2 条件1: 如果平均移动距离和该特征点移动距离都较大, 但是二者的移动方向相差较多, 则舍弃该匹配点
-                /// 该条件暂未使用
-                /// 上面计算出了特征点的平均移动方向, 现在来比较他们每个与平均移动方向的角度是否大于30度,大于了就直接continue跳过(cos30=0.85)
+
                 if(0)
                 {
-                    if (fObjMeanDeltaNorm > 20 && move_norm > 20)//TODO 如果两帧跟踪的光流移动的很小也不用比较光流.
+                    if (fObjMeanDeltaNorm > 20 && move_norm > 20)
                     {
                         if ((direct_x * fObjMeanDeltaX + direct_y * fObjMeanDeltaY) < 0.85) //cos45'=0.7 cos30=0.86  0.85  or 0.80
                         {
@@ -1857,7 +1846,7 @@ void ORBmatcher::SearchByOpticalFlowTracking(const Frame &LastFrame,  const int 
                 }
 
                 int nLastOctave = LastFrame.mvObjKeys[nInLastFrameDetObjOrder][i].octave;
-                float radius = th * CurrentFrame.mvScaleFactors[nLastOctave]; // 搜索半经想一下
+                float radius = th * CurrentFrame.mvScaleFactors[nLastOctave];
 
 
 
@@ -1871,15 +1860,15 @@ void ORBmatcher::SearchByOpticalFlowTracking(const Frame &LastFrame,  const int 
                     if(vIndices2.empty())
                         continue;
 
-                    cv::Mat dMP;// 计算描述子距离, 为什么ORB-SLAM是计算地图点的描述子
+                    cv::Mat dMP;
                     dMP = LastFrame.mvObjPointsDescriptors[nInLastFrameDetObjOrder].row(i);
                     int bestDist = 256;
-                    for(vector<std::size_t>::const_iterator vit=vIndices2.begin(), vend=vIndices2.end(); vit!=vend; vit++)// 遍历备选ORB特征点
+                    for(vector<std::size_t>::const_iterator vit=vIndices2.begin(), vend=vIndices2.end(); vit!=vend; vit++)
                     {
                         const std::size_t i2 = *vit;
-                        if(CurrentFrame.mvpMapObjectPoints[nInCurrentFrameDetObjOrder][i2])// 如果该路标点已经匹配过了， 则跳过
+                        if(CurrentFrame.mvpMapObjectPoints[nInCurrentFrameDetObjOrder][i2])
                             continue;
-                        const cv::Mat &d = CurrentFrame.mvObjPointsDescriptors[nInCurrentFrameDetObjOrder].row(i2);// 找到最近的描述子距离
+                        const cv::Mat &d = CurrentFrame.mvObjPointsDescriptors[nInCurrentFrameDetObjOrder].row(i2);
                         const int dist = DescriptorDistance(dMP, d);
                         if(dist<bestDist)
                         {
@@ -1887,7 +1876,7 @@ void ORBmatcher::SearchByOpticalFlowTracking(const Frame &LastFrame,  const int 
                             bestIdx2=i2;
                         }
                     }
-                    if(bestDist<=TH_HIGH_FORDYNAMIC)// 条件： 要求最近描述子距离小于阈值， 则找到匹配点
+                    if(bestDist<=TH_HIGH_FORDYNAMIC)
                         continue;
                 }
                 else{
@@ -1899,17 +1888,17 @@ void ORBmatcher::SearchByOpticalFlowTracking(const Frame &LastFrame,  const int 
                     continue;
                 if(CurrentFrame.mvpMapObjectPoints[nInCurrentFrameDetObjOrder][bestIdx2])
                     continue;
-                cv::DMatch match = cv::DMatch(nInLastFrameDetObjOrder, bestIdx2, bestDist); // distance 是描述子距离
+                cv::DMatch match = cv::DMatch(nInLastFrameDetObjOrder, bestIdx2, bestDist);
                 vDMacthes.push_back(match);
             }
         }
 
-        // PNPRANSAC去除误匹配
+        // PNPRANSAC
         cv::Mat ransacInliersFlag;
         vector<pair<size_t, size_t>> vInlierMatches;
         size_t nMatchesNum = 0;
         ForObjectPnPRANSAC(LastFrame, CurrentFrame, nInLastFrameDetObjOrder, nInCurrentFrameDetObjOrder, vDMacthes, ransacInliersFlag);
-        // 地图点传递
+
         for(int l = 0; l<ransacInliersFlag.rows; l++)
         {
             //if(bTrack == false)
@@ -1980,7 +1969,7 @@ void ORBmatcher::ForObjectORBFilter(const Mat &descriptors_1, const Mat &descrip
     double max_dist = min_max.second->distance;
     printf("-- Max dist : %f \n", max_dist);
     printf("-- Min dist : %f \n", min_dist);
-    //当描述子之间的距离大于两倍的最小距离时,即认为匹配有误.但有时候最小距离会非常小,设置一个经验值30作为下限.
+\
     for (int i = 0; i < descriptors_1.rows; i++)
     {
         if (matches[i].distance <= max(2 * min_dist, 30.0))
@@ -1992,7 +1981,7 @@ void ORBmatcher::ForObjectORBFilter(const Mat &descriptors_1, const Mat &descrip
 
 void ORBmatcher::TwoFrameObjectPointsBruceMatching(const Frame &LastFrame, const Frame& CurrentFrame, const int &nInLastFrameDetObjOrder, const int &nInCurrentFrameDetObjOrder, const bool & bUseGMSFlag, vector<DMatch> &matches)
 {
-    // 1. 采用其他方法进行匹配: 暴力匹配 + GMS去除
+\
     Mat descriptors_1, descriptors_2;
     std::vector<KeyPoint> keypoints_1 = LastFrame.mvObjKeysUn[nInLastFrameDetObjOrder];
     std::vector<KeyPoint> keypoints_2 = CurrentFrame.mvObjKeysUn[nInCurrentFrameDetObjOrder];
@@ -2006,7 +1995,7 @@ void ORBmatcher::TwoFrameObjectPointsBruceMatching(const Frame &LastFrame, const
         descriptors_2.push_back(CurrentFrame.mvObjPointsDescriptors[nInCurrentFrameDetObjOrder].row(m));
     }
     BFMatcher matcher(NORM_HAMMING);
-    matcher.match(descriptors_1, descriptors_2, matches);// 暴力匹配
+    matcher.match(descriptors_1, descriptors_2, matches);\
 
     vector<DMatch> vMOPMathes;
     for(auto &k: matches)
@@ -2019,8 +2008,7 @@ void ORBmatcher::TwoFrameObjectPointsBruceMatching(const Frame &LastFrame, const
     }
     matches.clear();
     matches = vMOPMathes;
-
-    //cout<<"采用暴力匹配点数: "<<matches.size()<<endl;
+\
     if(1)
     {
         Mat matORBMatch;
@@ -2028,8 +2016,7 @@ void ORBmatcher::TwoFrameObjectPointsBruceMatching(const Frame &LastFrame, const
         imshow("Bruce Match", matORBMatch);
         waitKey(0);
     }
-
-    // 如果不用GMS筛选, 用基本的阈值策略进行筛选是否可行?
+\
 
 
     if(bUseGMSFlag)
@@ -2046,7 +2033,7 @@ void ORBmatcher::TwoFrameObjectPointsBruceMatching(const Frame &LastFrame, const
             imshow("gms ORB match", gmsORBMatch);
             waitKey(0);
         }
-        cout<<"GMS筛选后匹配点数: "<<matches.size()<<endl;
+        cout<<"GMS matching pairs: "<<matches.size()<<endl;
     }
 
 
@@ -2055,9 +2042,7 @@ void ORBmatcher::TwoFrameObjectPointsBruceMatching(const Frame &LastFrame, const
 
 int ORBmatcher::SearchByBruceMatching(const Frame& LastFrame, const Frame& CurrentFrame, const int &nLastOrder, const int &nCurrenOrder, vector<MapObjectPoint *> &vpMapObjectPointMatches)
 {
-    // 我的方法是:描述子匹配找到最佳描述子, 然后进行剔除, 剔除分成两块: 旋转和尺度
 
-    // 输出:就是当前帧的目标地图点
     vpMapObjectPointMatches = vector<MapObjectPoint* >(CurrentFrame.mvpMapObjectPoints[nCurrenOrder].size(), static_cast<MapObjectPoint*>(NULL));
 
     vector<MapObjectPoint*> vpMapLast = LastFrame.mvpMapObjectPoints[nLastOrder];
@@ -2070,20 +2055,20 @@ int ORBmatcher::SearchByBruceMatching(const Frame& LastFrame, const Frame& Curre
     int nmatches = 0;
     vector<cv::DMatch> vDMatches;
 
-    for(size_t i=0; i<vpMapLast.size(); i++) // 遍历上一帧该目标的所有点
+    for(size_t i=0; i<vpMapLast.size(); i++)
     {
-        MapObjectPoint* pMP = vpMapLast[i]; // 到底是应该用3D点的描述子还是2D点的描述子?
-        if(!pMP || pMP->isBad() || LastFrame.mvbObjKeysOutlier[nLastOrder][i]) // 要求上一帧的3D点存在,不是坏点,也不是outlier
+        MapObjectPoint* pMP = vpMapLast[i];
+        if(!pMP || pMP->isBad() || LastFrame.mvbObjKeysOutlier[nLastOrder][i])
             continue;
 
-        const cv::Mat &dLF = LastFrame.mvObjPointsDescriptors[nLastOrder].row(i); // 2d点描述子
+        const cv::Mat &dLF = LastFrame.mvObjPointsDescriptors[nLastOrder].row(i);
         int bestDist1 = 256;
         int bestIdxCF = -1;
         int bestDist2 = 256;
 
-        for(size_t iF = 0; iF < CurrentFrame.mvObjKeysUn[nCurrenOrder].size(); iF++)//遍历当前帧该目标的所有地图点
+        for(size_t iF = 0; iF < CurrentFrame.mvObjKeysUn[nCurrenOrder].size(); iF++)
         {
-            if(vpMapObjectPointMatches[iF]) // 表明该点已经匹配过了
+            if(vpMapObjectPointMatches[iF])
                 continue;
             const cv::Mat &dCF = CurrentFrame.mvObjPointsDescriptors[nCurrenOrder].row(iF);
             const int dist = DescriptorDistance(dLF, dCF);
@@ -2091,7 +2076,7 @@ int ORBmatcher::SearchByBruceMatching(const Frame& LastFrame, const Frame& Curre
             {
                 bestDist2 = bestDist1;
                 bestDist1 = dist;
-                bestIdxCF = iF; // 当前帧最佳匹配点序号
+                bestIdxCF = iF;
             }
             else if(dist < bestDist2)
             {
@@ -2103,8 +2088,8 @@ int ORBmatcher::SearchByBruceMatching(const Frame& LastFrame, const Frame& Curre
         {
             if(static_cast<float>(bestDist1) < mfNNratio * static_cast<float>(bestDist2))
             {
-                vpMapObjectPointMatches[bestIdxCF] = pMP; // 传递上一帧的3D点
-                const cv::KeyPoint &kp = LastFrame.mvObjKeysUn[nLastOrder][i]; // 构建匹配点集的角度直方图
+                vpMapObjectPointMatches[bestIdxCF] = pMP;
+                const cv::KeyPoint &kp = LastFrame.mvObjKeysUn[nLastOrder][i];
                 if(mbCheckOrientation)
                 {
                     float rot = kp.angle - CurrentFrame.mvObjKeys[nCurrenOrder][bestIdxCF].angle;
@@ -2120,7 +2105,7 @@ int ORBmatcher::SearchByBruceMatching(const Frame& LastFrame, const Frame& Curre
                     rotHist[bin].push_back(bestIdxCF);
                 }
 
-                cv::DMatch match = cv::DMatch(i, bestIdxCF, bestDist1); // distance 是描述子距离
+                cv::DMatch match = cv::DMatch(i, bestIdxCF, bestDist1);
                 vDMatches.push_back(match);
 
                 nmatches++;
@@ -2129,7 +2114,7 @@ int ORBmatcher::SearchByBruceMatching(const Frame& LastFrame, const Frame& Curre
 
     }
 
-    if(mbCheckOrientation) // 角度剔除
+    if(mbCheckOrientation)
     {
         int ind1 = -1;
         int ind2 = -1;
@@ -2147,14 +2132,6 @@ int ORBmatcher::SearchByBruceMatching(const Frame& LastFrame, const Frame& Curre
         }
     }
 
-
-    // 尺度筛选
-    // 首先判断目标是在前进还是在后退
-    if(1)
-    {
-
-    }
-    //cout<<"采用暴力匹配点数: "<<nmatches<<endl;
     //display
     if(0)
     {
@@ -2222,7 +2199,7 @@ void ORBmatcher::ForObjectPnPRANSAC(const Frame& LastFrame, const Frame& Current
 
         g2o::SE3Quat Tco2 = pMO->GetCFInFrameObjState(CurrentFrame.mnId).pose;
         Eigen::Matrix3d Kalib = ORB_SLAM2::EdCamProjMatrix;
-        // 计算重投影误差: e = (u,v) - K * Tco * Poj
+
         double e1 = 0, e2 = 0;
         for(size_t i=0; i<pts_3d.size(); i++)
         {
@@ -2238,24 +2215,13 @@ void ORBmatcher::ForObjectPnPRANSAC(const Frame& LastFrame, const Frame& Current
             Eigen::Vector2d error2 = zj - projected2;
             e2 += error2.norm();
 
-            //cout<<"err: RANSAC前: "<<error2<<endl;
-            //cout<<"RANSAC后: "<<error<<endl;
+
         }
-        //cout<<"err: RANSAC前: "<<e2<<" RANSAC后: "<<e1<<endl;
-
-
-
-        //g2o::SE3Quat PoseErr = CurrentFrame.mvDetectionObjects[nInCurrentFrameDetObjOrder]->mTruthPosInCameraFrame.pose.inverse() * Tco;
-        //cout<<"RANSAC后误差: "<<PoseErr.toMinimalVector()<<endl;
-
-        //g2o::SE3Quat Two;
-        //Two = CurrentFrame.mSETcw.inverse() * Tco;
-        //g2o::ObjectState cObjCur = pMO->GetInFrameObjState(CurrentFrame.mnId);
 
         g2o::ObjectState cObjCur = pMO->GetCFInFrameObjState(CurrentFrame.mnId);
-        //cout<<"原来: "<<cObjCur.pose<<endl;
+        //cout<<"Previous: "<<cObjCur.pose<<endl;
         cObjCur.pose = Tco;
-        //cout<<"现在: "<<cObjCur.pose<<endl;
+        //cout<<"Current: "<<cObjCur.pose<<endl;
         g2o::ObjectState Swo(CurrentFrame.mSETcw.inverse() * cObjCur.pose, cObjCur.scale);
         //pMO->SetInFrameObjState(Swo, CurrentFrame.mnId);
         //pMO->SetCFInFrameObjState(cObjCur, CurrentFrame.mnId);
@@ -2263,7 +2229,7 @@ void ORBmatcher::ForObjectPnPRANSAC(const Frame& LastFrame, const Frame& Current
 
 
     //cout<<CurrentFrame.mvDetectionObjects[nInCurrentFrameDetObjOrder]->mTruthPosInCameraFrame.pose<<endl;
-    cout<<"目标: "<<pMO->mnTruthID<<"  RANSAC前匹配点数: "<<pts_3d.size()<<"  RANSAC后Inlier点数: "<<inliers.rows<<endl;
+
 }
 
 
@@ -2271,7 +2237,6 @@ bool ORBmatcher::SearchByOfflineOpticalFlowTracking(const Frame &LastFrame, cons
 {
     if (LastFrame.mRawImg.rows == 0 || LastFrame.mRawImg.cols == 0)
     {
-        cout<<"上一帧没有图像？"<<endl;
         exit(1);
     }
     bool bTrack = false;
@@ -2282,18 +2247,15 @@ bool ORBmatcher::SearchByOfflineOpticalFlowTracking(const Frame &LastFrame, cons
         nInLastFrameDetObjOrder = vnpTrackedObjOrders[l].first;
         nInCurrentFrameDetObjOrder = vnpTrackedObjOrders[l].second;
         DetectionObject* cLastCuboidTmp = LastFrame.mvDetectionObjects[nInLastFrameDetObjOrder];
-        DetectionObject* cCurrentCuboidTmp = CurrentFrame.mvDetectionObjects[nInCurrentFrameDetObjOrder];// 当前帧的cuboid观测
+        DetectionObject* cCurrentCuboidTmp = CurrentFrame.mvDetectionObjects[nInCurrentFrameDetObjOrder];
         if(cLastCuboidTmp->mnObjectID != cCurrentCuboidTmp->mnObjectID)
             assert(0);
         size_t nCurrentFeaNum = CurrentFrame.mvObjKeys[nInCurrentFrameDetObjOrder].size();
-        //vector<MapObjectPoint*> vpLastMOPs =  cLastCuboidTmp->GetInFrameMapObjectPoints();// 准备上一帧该object有地图点的关键点集合:vpInLastFrameCorresObjPts, 与(在帧里的)序号vnInLastFrameExsitMOPOrders
+        //vector<MapObjectPoint*> vpLastMOPs =  cLastCuboidTmp->GetInFrameMapObjectPoints();
         vector<MapObjectPoint*> vpLastMOPs =  LastFrame.mvpMapObjectPoints[nInLastFrameDetObjOrder];
         vector<cv::KeyPoint> vInLastFrameObjPts = LastFrame.mvObjKeysUn[nInLastFrameDetObjOrder];
         size_t nLastFeaNum = vInLastFrameObjPts.size();
 
-        // 如果上一帧的目标地图点很少, 怎么办
-
-        // method1: 离线光流跟踪
         vector<DMatch> vDMacthes;
         cv::Point2f pPointLast, pPointCurrent;
         cv::Vec2d OpticalFlow;
@@ -2302,14 +2264,14 @@ bool ORBmatcher::SearchByOfflineOpticalFlowTracking(const Frame &LastFrame, cons
             if(vpLastMOPs[n] == NULL)
                 continue;
             pPointLast = vInLastFrameObjPts[n].pt;
-            OpticalFlow = LastFrame.mForwardOpticalImg.at<cv::Vec2d>(round(pPointLast.y), round(pPointLast.x));// 通过离线光流(imgFprwardOptical)预测上一帧特征点在当前帧的像素坐标: pPointCurrent
+            OpticalFlow = LastFrame.mForwardOpticalImg.at<cv::Vec2d>(round(pPointLast.y), round(pPointLast.x));
             pPointCurrent.x = OpticalFlow(0) + pPointLast.x;
             pPointCurrent.y = OpticalFlow(1) + pPointLast.y;
 
             //vpLastMOPs[n]->mTrackProjX = pPointCurrent.x;
             //vpLastMOPs[n]->mTrackProjY = pPointCurrent.y;
 
-            //cout<<"赋值: "<<vpLastMOPs[n]->mnId<<" "<<pPointCurrent.x<<" "<<pPointCurrent.y<<endl;
+            //cout<<vpLastMOPs[n]->mnId<<" "<<pPointCurrent.x<<" "<<pPointCurrent.y<<endl;
             //cout<<vpLastMOPs[n]->mDescriptor<<endl;
 
 
@@ -2320,23 +2282,20 @@ bool ORBmatcher::SearchByOfflineOpticalFlowTracking(const Frame &LastFrame, cons
             if(vIndices2.empty())
                 continue;
 
-            cv::Mat dMP;// 计算描述子距离, 为什么ORB-SLAM是计算地图点的描述子
+            cv::Mat dMP;
             dMP = LastFrame.mvObjPointsDescriptors[nInLastFrameDetObjOrder].row(n);
-
-            //cout<<"跟踪上一帧描述子"<<endl;
-            //cout<<   dMP<<endl;
 
             int bestDist = 256;
             int bestIdx2 = -1;
-            for(vector<std::size_t>::const_iterator vit=vIndices2.begin(), vend=vIndices2.end(); vit!=vend; vit++)// 遍历备选ORB特征点
+            for(vector<std::size_t>::const_iterator vit=vIndices2.begin(), vend=vIndices2.end(); vit!=vend; vit++)
             {
                 const std::size_t i2 = *vit;
                 //cout<<"序号1: "<<i2<<endl;
-                if(CurrentFrame.mvpMapObjectPoints[nInCurrentFrameDetObjOrder][i2])// 如果该路标点已经匹配过了， 则跳过
+                if(CurrentFrame.mvpMapObjectPoints[nInCurrentFrameDetObjOrder][i2])
                     continue;
-                if(CurrentFrame.mvbObjKeysMatchedFlag[nInCurrentFrameDetObjOrder][i2] != false) // 只有逐点匹配才会用到这个, 不是逐点匹配不用
+                if(CurrentFrame.mvbObjKeysMatchedFlag[nInCurrentFrameDetObjOrder][i2] != false)
                     continue;
-                const cv::Mat &d = CurrentFrame.mvObjPointsDescriptors[nInCurrentFrameDetObjOrder].row(i2);// 找到最近的描述子距离
+                const cv::Mat &d = CurrentFrame.mvObjPointsDescriptors[nInCurrentFrameDetObjOrder].row(i2);
                 const int dist = DescriptorDistance(dMP, d);
                 if(dist<bestDist)
                 {
@@ -2345,41 +2304,38 @@ bool ORBmatcher::SearchByOfflineOpticalFlowTracking(const Frame &LastFrame, cons
                 }
             }
             //cout<<"best: "<<bestDist<<endl;
-            if(bestDist<=TH_HIGH_FORDYNAMIC)// 条件： 要求最近描述子距离小于阈值， 则找到匹配点
+            if(bestDist<=TH_HIGH_FORDYNAMIC)
             {
-                cv::DMatch match = cv::DMatch(n, bestIdx2, bestDist); // distance 是描述子距离
+                cv::DMatch match = cv::DMatch(n, bestIdx2, bestDist);
                 vDMacthes.push_back(match);
                 CurrentFrame.mvbObjKeysMatchedFlag[nInCurrentFrameDetObjOrder][bestIdx2] = true;
             }
         }
-        //cout<<"目标: "<<cCurrentCuboidTmp->mnObjectID<<" 跟踪点数: "<<vDMacthes.size()<<endl;
 
-        // method2 : 暴力匹配 + GMS, 这里是否可以考虑在光流跟踪的基础上再暴力匹配
+
         size_t nMinRansacNum = 5;
-        if(vDMacthes.size()<nMinRansacNum) // 采用暴力匹配
+        if(vDMacthes.size()<nMinRansacNum)
         {
             //CurrentFrame.mvbObjKeysMatchedFlag[nInCurrentFrameDetObjOrder] = vector<bool>(CurrentFrame.mvObjKeysUn[nInCurrentFrameDetObjOrder].size(), false);
             vector<cv::DMatch> vORBMatches;
             TwoFrameObjectPointsBruceMatching(LastFrame, CurrentFrame, nInLastFrameDetObjOrder, nInCurrentFrameDetObjOrder, true, vORBMatches);
-            vDMacthes.clear(); // 完全是为了画图
+            vDMacthes.clear();
             vDMacthes = vORBMatches;
-            cout<<"不够, 重新采用暴力匹配点数: "<<vDMacthes.size();
-            if(vDMacthes.size()<nMinRansacNum)// 如果暴力匹配的数量还是很少, 说明确实没有什么匹配
+            if(vDMacthes.size()<nMinRansacNum)
             {
-                cout<<RED<<"  警告: 该目标跟踪点数过少!"<<endl<<WHITE;
+                cout<<RED<<"  The number of pairs are too low!"<<endl<<WHITE;
                 continue;
             }
             cout<<endl;
         }
 
-        // PNPRANSAC去除误匹配
+        // PNPRANSAC
         cv::Mat ransacInliersFlag;
         vector<pair<size_t, size_t>> vInlierMatches;
         size_t nMatchesNum = 0;
         ForObjectPnPRANSAC(LastFrame, CurrentFrame, nInLastFrameDetObjOrder, nInCurrentFrameDetObjOrder, vDMacthes, ransacInliersFlag);
 
 
-        // 地图点传递
         for(int l = 0; l<ransacInliersFlag.rows; l++)
         //for(int l = 0; l<vDMacthes.size(); l++)
         {
@@ -2398,9 +2354,9 @@ bool ORBmatcher::SearchByOfflineOpticalFlowTracking(const Frame &LastFrame, cons
             //break;
             //cout<<vMatchTmp.first<<" "<<vMatchTmp.second<<endl;
         }
-        //cout<<"目标 "<<cLastCuboidTmp->mnObjectID<<" : RANSAC后Inlier点数"<<nMatchesNum<<endl;
+
         vnAllObjMatchesNum[l] = nMatchesNum;
-        cout<<"目标"<<cLastCuboidTmp->mnObjectID<<" 跟踪上一帧3D点数: "<<nMatchesNum<<endl;
+        cout<<"Object"<<cLastCuboidTmp->mnObjectID<<" The number of tracked pairs from the last frame: "<<nMatchesNum<<endl;
         if(nMatchesNum>10)
             cCurrentCuboidTmp->mbTrackOK = true;
         else
@@ -2417,7 +2373,7 @@ int ORBmatcher::SearchByOfflineOpticalFlowTracking(const Frame &LastFrame, Frame
     size_t nMinNum = 10;
 
     DetectionObject* cLastCuboidTmp = LastFrame.mvDetectionObjects[nInLastFrameDetObjOrder];
-    DetectionObject* cCurrentCuboidTmp = CurrentFrame.mvDetectionObjects[nInCurrentFrameDetObjOrder];// 当前帧的cuboid观测
+    DetectionObject* cCurrentCuboidTmp = CurrentFrame.mvDetectionObjects[nInCurrentFrameDetObjOrder];
     if(cLastCuboidTmp->mnObjectID != cCurrentCuboidTmp->mnObjectID)
         assert(0);
     size_t nCurrentFeaNum = CurrentFrame.mvObjKeys[nInCurrentFrameDetObjOrder].size();
@@ -2425,43 +2381,39 @@ int ORBmatcher::SearchByOfflineOpticalFlowTracking(const Frame &LastFrame, Frame
     vector<cv::KeyPoint> vInLastFrameObjPts = LastFrame.mvObjKeysUn[nInLastFrameDetObjOrder];
     size_t nLastFeaNum = vInLastFrameObjPts.size();
 
-    // 如果上一帧的目标地图点很少, 怎么办
 
-    // method1: 离线光流跟踪
     vector<DMatch> vDMacthes;
     cv::Point2f pPointLast, pPointCurrent;
     cv::Vec2d OpticalFlow;
     for(size_t n=0; n<nLastFeaNum; n++)
     {
-        if(vpLastMOPs[n] == NULL) // 如果上一帧3D点不存在就没必要匹配了
+        if(vpLastMOPs[n] == NULL)
             continue;
         pPointLast = vInLastFrameObjPts[n].pt;
-        OpticalFlow = LastFrame.mForwardOpticalImg.at<cv::Vec2d>(round(pPointLast.y), round(pPointLast.x));// 通过离线光流(imgFprwardOptical)预测上一帧特征点在当前帧的像素坐标: pPointCurrent
+        OpticalFlow = LastFrame.mForwardOpticalImg.at<cv::Vec2d>(round(pPointLast.y), round(pPointLast.x));
         pPointCurrent.x = OpticalFlow(0) + pPointLast.x;
         pPointCurrent.y = OpticalFlow(1) + pPointLast.y;
 
         vector<std::size_t> vIndices2;
-        vIndices2 = CurrentFrame.GetObjectFeaturesInArea(nInCurrentFrameDetObjOrder, nCurrentFeaNum, pPointCurrent.x,pPointCurrent.y,RADIUS_FORDYNAMIC,0,7);// 在预测点附近搜索备选ORB特征点： 搜索半径：RADIUS_FORDYNAMIC(自己设置的比较小), 在所有(0-7)的金字塔层级搜索
+        vIndices2 = CurrentFrame.GetObjectFeaturesInArea(nInCurrentFrameDetObjOrder, nCurrentFeaNum, pPointCurrent.x,pPointCurrent.y,RADIUS_FORDYNAMIC,0,7);
         if(vIndices2.empty())
             continue;
 
-        cv::Mat dMP;// 计算描述子距离, 为什么ORB-SLAM是计算地图点的描述子
+        cv::Mat dMP;
         dMP = LastFrame.mvObjPointsDescriptors[nInLastFrameDetObjOrder].row(n);
 
-        //cout<<"跟踪上一帧描述子"<<endl;
-        //cout<<   dMP<<endl;
 
         int bestDist = 256;
         int bestIdx2 = -1;
-        for(vector<std::size_t>::const_iterator vit=vIndices2.begin(), vend=vIndices2.end(); vit!=vend; vit++)// 遍历备选ORB特征点
+        for(vector<std::size_t>::const_iterator vit=vIndices2.begin(), vend=vIndices2.end(); vit!=vend; vit++)
         {
             const std::size_t i2 = *vit;
-            //cout<<"序号1: "<<i2<<endl;
-            if(CurrentFrame.mvpMapObjectPoints[nInCurrentFrameDetObjOrder][i2])// 如果该路标点已经匹配过了， 则跳过
+
+            if(CurrentFrame.mvpMapObjectPoints[nInCurrentFrameDetObjOrder][i2])
                 continue;
-            if(CurrentFrame.mvbObjKeysMatchedFlag[nInCurrentFrameDetObjOrder][i2] != false) // 只有逐点匹配才会用到这个, 不是逐点匹配不用
+            if(CurrentFrame.mvbObjKeysMatchedFlag[nInCurrentFrameDetObjOrder][i2] != false)
                 continue;
-            const cv::Mat &d = CurrentFrame.mvObjPointsDescriptors[nInCurrentFrameDetObjOrder].row(i2);// 找到最近的描述子距离
+            const cv::Mat &d = CurrentFrame.mvObjPointsDescriptors[nInCurrentFrameDetObjOrder].row(i2);
             const int dist = DescriptorDistance(dMP, d);
             if(dist<bestDist)
             {
@@ -2470,9 +2422,9 @@ int ORBmatcher::SearchByOfflineOpticalFlowTracking(const Frame &LastFrame, Frame
             }
         }
         //cout<<"best: "<<bestDist<<endl;
-        if(bestDist<=TH_HIGH_FORDYNAMIC)// 条件： 要求最近描述子距离小于阈值， 则找到匹配点
+        if(bestDist<=TH_HIGH_FORDYNAMIC)
         {
-            cv::DMatch match = cv::DMatch(n, bestIdx2, bestDist); // distance 是描述子距离
+            cv::DMatch match = cv::DMatch(n, bestIdx2, bestDist);
             vDMacthes.push_back(match);
             CurrentFrame.mvbObjKeysMatchedFlag[nInCurrentFrameDetObjOrder][bestIdx2] = true;
         }
@@ -2481,12 +2433,12 @@ int ORBmatcher::SearchByOfflineOpticalFlowTracking(const Frame &LastFrame, Frame
     if(vDMacthes.size()<nMinNum)
         return 0;
 
-    // PNPRANSAC去除误匹配
+
     cv::Mat ransacInliersFlag;
     vector<pair<size_t, size_t>> vInlierMatches;
     ForObjectPnPRANSAC(LastFrame, CurrentFrame, nInLastFrameDetObjOrder, nInCurrentFrameDetObjOrder, vDMacthes, ransacInliersFlag);
 
-    // 地图点传递
+
     size_t nMatchesNum = 0;
     for(int l = 0; l<ransacInliersFlag.rows; l++)
         //for(int l = 0; l<vDMacthes.size(); l++)
@@ -2502,57 +2454,8 @@ int ORBmatcher::SearchByOfflineOpticalFlowTracking(const Frame &LastFrame, Frame
         nMatchesNum++;
     }
 
-    cout<<"目标"<<cCurrentCuboidTmp->mnObjectID<<" 跟踪上一帧3D点数: "<<nMatchesNum<<endl;
-
     if(0)
         DrawInFrameFeatureMatches(LastFrame, CurrentFrame, nInLastFrameDetObjOrder, nInCurrentFrameDetObjOrder, vInlierMatches, true);// 画出当前object的匹配结果
-
-    return nMatchesNum;
-}
-
-
-int ORBmatcher::SearchByBruceMatchingWithGMS(const Frame &LastFrame, Frame &CurrentFrame, const int &nInLastFrameDetObjOrder, const int &nInCurrentFrameDetObjOrder)
-{
-    size_t nMinNum = 10;
-    DetectionObject* cLastCuboidTmp = LastFrame.mvDetectionObjects[nInLastFrameDetObjOrder];
-    DetectionObject* cCurrentCuboidTmp = CurrentFrame.mvDetectionObjects[nInCurrentFrameDetObjOrder];// 当前帧的cuboid观测
-    if(cLastCuboidTmp->mnObjectID != cCurrentCuboidTmp->mnObjectID)
-        assert(0);
-    // 1. 暴力匹配 with GMS
-    vector<cv::DMatch> vORBMatches;
-    TwoFrameObjectPointsBruceMatching(LastFrame, CurrentFrame, nInLastFrameDetObjOrder, nInCurrentFrameDetObjOrder, false, vORBMatches);
-    if(vORBMatches.size()<nMinNum)
-    {
-        cout<<"目标暴力匹配点数太少! "<<vORBMatches.size()<<" 不足以进行RANSAC!"<<endl;
-        return vORBMatches.size();
-    }
-
-    // 2. PnPRANSAC 去除误差匹配
-    cv::Mat ransacInliersFlag;//  计算下PnP重投影误差:
-    vector<pair<size_t, size_t>> vInlierMatches;// PNPRANSAC去除误匹配
-    ForObjectPnPRANSAC(LastFrame, CurrentFrame, nInLastFrameDetObjOrder, nInCurrentFrameDetObjOrder, vORBMatches, ransacInliersFlag);
-
-    // 3. 地图点传递
-
-    size_t nMatchesNum = 0;
-    //for(int l = 0; l<ransacInliersFlag.rows; l++)
-    for(int l = 0; l<vORBMatches.size(); l++)
-    {
-        //int nOr = ransacInliersFlag.at<int>(l);
-        int nOr = l;
-        pair<size_t, size_t> vMatchTmp = make_pair(vORBMatches[nOr].queryIdx, vORBMatches[nOr].trainIdx);
-        MapObjectPoint* pMP = LastFrame.mvpMapObjectPoints[nInLastFrameDetObjOrder][vMatchTmp.first];
-        CurrentFrame.mvpMapObjectPoints[nInCurrentFrameDetObjOrder][vMatchTmp.second] = pMP;
-        cCurrentCuboidTmp->AddMapObjectPoint(vMatchTmp.second, pMP);
-        vInlierMatches.push_back(vMatchTmp);
-        nMatchesNum++;
-    }
-
-    cout<<"目标"<<cCurrentCuboidTmp->mnObjectID<<" 跟踪上一帧3D点数: "<<nMatchesNum<<endl;
-
-    if(0)
-        DrawInFrameFeatureMatches(LastFrame, CurrentFrame, nInLastFrameDetObjOrder, nInCurrentFrameDetObjOrder, vInlierMatches, true);// 画出当前object的匹配结果
-
 
     return nMatchesNum;
 }
@@ -2576,7 +2479,7 @@ void ORBmatcher::DrawInFrameFeatureMatches(const Frame &pKF1, const Frame &pKF2,
     int fr1 = pKF1.mnId;
     int fr2 = pKF2.mnId;
     string strimg1, strimg2;
-    // kitti 数据集
+
     if(ORB_SLAM2::EnDataSetNameNum == 0)
     {
         sprintf(frame1_id, "%06d", fr1);
@@ -2584,7 +2487,7 @@ void ORBmatcher::DrawInFrameFeatureMatches(const Frame &pKF1, const Frame &pKF2,
         strimg1 = init_name + frame1_id + ".png";
         strimg2 = init_name + frame2_id + ".png";
     }
-    // virtual kitti数据集
+    // virtual kitti
     else if(ORB_SLAM2::EnDataSetNameNum == 1)
     {
         sprintf(frame1_id, "%05d", fr1);
@@ -2603,7 +2506,7 @@ void ORBmatcher::DrawInFrameFeatureMatches(const Frame &pKF1, const Frame &pKF2,
 
     std::vector<cv::DMatch> good_matches;
     for (size_t i = 0; i < vMatchedPairs.size(); i++) {
-        cv::DMatch *match = new cv::DMatch(vMatchedPairs[i].first, vMatchedPairs[i].second, 0.1); // distance 是描述子距离
+        cv::DMatch *match = new cv::DMatch(vMatchedPairs[i].first, vMatchedPairs[i].second, 0.1);
         good_matches.push_back(*match);
     }
     cv::drawMatches(img_1, keypoints_1, img_2, keypoints_2, good_matches, img_goodmatch);

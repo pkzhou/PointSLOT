@@ -443,7 +443,6 @@ int Optimizer::PoseOptimization(Frame *pFrame)
             {
                 e->computeError();
             }
-            /// 计算下上次优化的总体误差
             else{
                 error_last_stereo = error_last_stereo + e->chi2();
                 stereo_edge++;
@@ -495,7 +494,7 @@ int Optimizer::CFSE3ObjStateOptimization(Frame *pFrame, const vector<std::size_t
         size_t n = vnNeedToBeOptimized[i];
         MapObject* mMapObjectTmp = pFrame->mvMapObjects[n];
         DetectionObject* cCuboidTmp = pFrame->mvDetectionObjects[n];
-        if(mMapObjectTmp==NULL) // 如果该目标不存在
+        if(mMapObjectTmp==NULL)
             assert(0);
         vcCuboids.push_back(cCuboidTmp);
         pMObjects.push_back(mMapObjectTmp);
@@ -522,12 +521,12 @@ int Optimizer::CFSE3ObjStateOptimization(Frame *pFrame, const vector<std::size_t
     int nTotalEdges = 0;
     const float deltaMono = sqrt(5.991);
     const float deltaStereo = sqrt(7.815);
-    // 单目
-    vector<vector<g2o::EdgeSE3ProjectXYZOnlyPose*>> veMonoEdges; // 分目标存储
+
+    vector<vector<g2o::EdgeSE3ProjectXYZOnlyPose*>> veMonoEdges;
     vector<vector<size_t>> vnMonoPointVertex;
     veMonoEdges.resize(pMObjects.size());
     vnMonoPointVertex.resize(pMObjects.size());
-    // 双目
+
     vector<vector<g2o::EdgeStereoSE3ProjectXYZOnlyPose*>> veStereoEdges;
     vector<vector<size_t>> vnStereoPointVertex;
     vnStereoPointVertex.resize(pMObjects.size());
@@ -538,21 +537,9 @@ int Optimizer::CFSE3ObjStateOptimization(Frame *pFrame, const vector<std::size_t
         MapObject* mObjectTmp  = pMObjects[i];
         //DetectionObject* cCuboidTmp = vcCuboids[i];
         size_t nInFrameDetObjOrder = vnInFrameOrder[i];
-        // 设置目标点-目标， 目标点-目标-相机 的条件是：(二折需要同时满足)
-        // 1. 该目标不是该帧建立
-        // 2. 该目标的目标点比较多
-        if(mObjectTmp->mnFirstObservationFrameId==pFrame->mnId) // 若该目标是该帧建立的, 则不应该用来优化
-        {
-            cout<<"目标"<<mObjectTmp->mnTruthID<<" 是当前帧"<<pFrame->mnId<<" 建立, 不应用来优化!"<<endl;
-            assert(0);
-        }
-        if(!mObjectTmp->mmBAFrameIdAndObjVertexID.count(pFrame->mnId))
-        {
-            cout<<"该object的顶点设置错误！"<<endl;
-            assert(0);
-        }
+
         vector<MapObjectPoint*> vpMapPointTmp = pFrame->mvpMapObjectPoints[nInFrameDetObjOrder];
-        vector<g2o::EdgeSE3ProjectXYZOnlyPose*> veMonoEdgesTmp; // 点投影临时容器
+        vector<g2o::EdgeSE3ProjectXYZOnlyPose*> veMonoEdgesTmp;
         vector<g2o::EdgeStereoSE3ProjectXYZOnlyPose*>veStereoEdgesTmp;
         vector<size_t> vnMonoPointVertexTmp;
         vector<size_t> vnStereoPointVertexTmp;
@@ -581,7 +568,7 @@ int Optimizer::CFSE3ObjStateOptimization(Frame *pFrame, const vector<std::size_t
             MapObjectPoint *pMP = vpMapPointTmp[j];
             if(!pMP)
                 continue;
-            if(pMP->mnFirstFrame == int(pFrame->mnId))// 如果该3D点是当前帧建立 就跳过，因为这个优化没有意义
+            if(pMP->mnFirstFrame == int(pFrame->mnId))
                 assert(0);
             if(pFrame->mvuObjKeysRight[nInFrameDetObjOrder][j]<0)// Monocular observation
             {
@@ -590,7 +577,7 @@ int Optimizer::CFSE3ObjStateOptimization(Frame *pFrame, const vector<std::size_t
                 Eigen::Matrix<double,2,1> obs;
                 const cv::KeyPoint &kpUn = pFrame->mvObjKeysUn[nInFrameDetObjOrder][j];
                 obs << kpUn.pt.x, kpUn.pt.y;
-                g2o::EdgeSE3ProjectXYZOnlyPose* e = new g2o::EdgeSE3ProjectXYZOnlyPose();//TODO 其中如果没有定义linearizeOplus()函数,则会直接调用数值求导,运算会比较慢
+                g2o::EdgeSE3ProjectXYZOnlyPose* e = new g2o::EdgeSE3ProjectXYZOnlyPose();
                 e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(mObjectTmp->mmBAFrameIdAndObjVertexID[pFrame->mnId])));
                 e->setMeasurement(obs);
                 const float invSigma2 = pFrame->mvInvLevelSigma2[kpUn.octave];
@@ -664,13 +651,13 @@ int Optimizer::CFSE3ObjStateOptimization(Frame *pFrame, const vector<std::size_t
         for(size_t i=0; i<pMObjects.size(); i++)
         {
             int nInFrameDetObjOrder = vnInFrameOrder[i];
-            for(size_t j=0; j<veMonoEdges[i].size(); j++) // 单目投影
+            for(size_t j=0; j<veMonoEdges[i].size(); j++)
             {
                 g2o::EdgeSE3ProjectXYZOnlyPose* e = veMonoEdges[i][j];
                 const size_t idx = vnMonoPointVertex[i][j];
-                if (pFrame->mvbObjKeysOutlier[nInFrameDetObjOrder][idx]) // 为true, 计算该边的误差
+                if (pFrame->mvbObjKeysOutlier[nInFrameDetObjOrder][idx])
                 {
-                    e->computeError();// NOTE g2o只会计算active edge的误差
+                    e->computeError();
                 }
                 else
                 {
@@ -682,20 +669,20 @@ int Optimizer::CFSE3ObjStateOptimization(Frame *pFrame, const vector<std::size_t
                     if (chi2 > chi2Mono[it])
                     {
                         pFrame->mvbObjKeysOutlier[nInFrameDetObjOrder][idx] = true;
-                        e->setLevel(1);// 设置为outlier
+                        e->setLevel(1);
                         vnBads[i]++;
                     }
                     else {
                         pFrame->mvbObjKeysOutlier[nInFrameDetObjOrder][idx] = false;
-                        e->setLevel(0);// 设置为inlier
+                        e->setLevel(0);
                     }
                     if (it == 2)
                     {
-                        e->setRobustKernel(0);// 除了前两次优化需要RobustKernel以外, 其余的优化都不需要
+                        e->setRobustKernel(0);
                     }
                 }
             }
-            for(size_t j=0; j<veStereoEdges[i].size(); j++) // 双目投影
+            for(size_t j=0; j<veStereoEdges[i].size(); j++)
             {
                 g2o::EdgeStereoSE3ProjectXYZOnlyPose* e = veStereoEdges[i][j];
                 const size_t idx = vnStereoPointVertex[i][j];
@@ -744,17 +731,16 @@ int Optimizer::CFSE3ObjStateOptimization(Frame *pFrame, const vector<std::size_t
                 g2o::SE3Quat PoseAfterOptimize = vObject->estimate();
                 if(0)
                 {
-                    // 优化前后误差: 比较在相机系下的结果
                     g2o::ObjectState PoseTruth = CuboidTmp->mTruthPosInCameraFrame;
                     g2o::SE3Quat PoseErrBefore = PoseTruth.pose.inverse() * PoseBeforeOptimize.pose;
                     double E = PoseTruth.pose.inverse().toMinimalVector().norm();
                     auto deltaE1 = PoseErrBefore.toMinimalVector();
                     double Rel_error = deltaE1.norm()/E * 100;
-                    cout<<Object_temp->mnTruthID<<"优化前误差："<<Rel_error<<"%, "<<PoseErrBefore.toMinimalVector().transpose()<<endl;
+                    cout<<Object_temp->mnTruthID<<"error before optimization："<<Rel_error<<"%, "<<PoseErrBefore.toMinimalVector().transpose()<<endl;
                     g2o::SE3Quat PoseErrAfter = PoseTruth.pose.inverse() * PoseAfterOptimize;
                     auto deltaE2 = PoseErrAfter.toMinimalVector();
                     Rel_error = deltaE2.norm()/E * 100;
-                    cout<<Object_temp->mnTruthID<<"优化后误差："<<Rel_error<<"%, "<<PoseErrAfter.toMinimalVector().transpose()<<endl;
+                    cout<<Object_temp->mnTruthID<<"error after optimization："<<Rel_error<<"%, "<<PoseErrAfter.toMinimalVector().transpose()<<endl;
                 }
                 g2o::ObjectState Swo(pFrame->mSETcw.inverse() * vObject->estimate(), PoseBeforeOptimize.scale);
                 Object_temp->SetInFrameObjState(Swo, pFrame->mnId);
@@ -764,721 +750,6 @@ int Optimizer::CFSE3ObjStateOptimization(Frame *pFrame, const vector<std::size_t
         }
     }
     return true;
-}
-
-int Optimizer::CFObjStateOptimization(Frame *pFrame, const vector<std::size_t> &vnNeedToBeOptimized, const bool &bVerbose)
-{
-    g2o::SparseOptimizer optimizer;
-    g2o::BlockSolver_6_3::LinearSolverType * linearSolver;
-    linearSolver = new g2o::LinearSolverDense<g2o::BlockSolver_6_3::PoseMatrixType>();
-    g2o::BlockSolver_6_3 * solver_ptr = new g2o::BlockSolver_6_3(linearSolver);
-    g2o::OptimizationAlgorithmLevenberg* solver = new g2o::OptimizationAlgorithmLevenberg(solver_ptr);
-    optimizer.setAlgorithm(solver);
-
-    std::vector<MapObject *> pMObjects;
-    std::vector<DetectionObject *> vcCuboids;
-    std::vector<size_t> vnInFrameOrder;
-    /*
-    for(size_t i=0; i<pFrame->mvMapObjects.size(); i++)
-    {
-        MapObject* mMapObjectTmp = pFrame->mvMapObjects[i];
-        DetectionObject* cCuboidTmp = pFrame->mvDetectionObjects[i];
-        if(mMapObjectTmp==NULL) // 如果该目标不存在
-            continue;
-        bool bFlag1 = (cCuboidTmp->mbFewMOPsFlag == false && mMapObjectTmp->mnFirstObservationFrameId!=pFrame->mnId);
-        if(bFlag1)
-        {
-            vcCuboids.push_back(cCuboidTmp);
-            pMObjects.push_back(mMapObjectTmp);
-            vnInFrameOrder.push_back(i);
-        }
-    }*/
-    for(size_t i=0; i<vnNeedToBeOptimized.size(); i++)
-    {
-        size_t n = vnNeedToBeOptimized[i];
-        MapObject* mMapObjectTmp = pFrame->mvMapObjects[n];
-        DetectionObject* cCuboidTmp = pFrame->mvDetectionObjects[n];
-        if(mMapObjectTmp==NULL) // 如果该目标不存在
-            assert(0);
-        vcCuboids.push_back(cCuboidTmp);
-        pMObjects.push_back(mMapObjectTmp);
-        vnInFrameOrder.push_back(n);
-    }
-
-    if(pMObjects.size()==0)
-        return false;
-    for(size_t i=0; i<pMObjects.size();i++)// Set Frame vertex
-    {
-        MapObject *Object_temp = pMObjects[i];
-        Object_temp->mmBAFrameIdAndObjVertexID.clear();
-        g2o::ObjectState cube_pose = Object_temp->GetCFInFrameObjState(pFrame->mnId);
-        //g2o::VertexSE3Expmap * vSE3 = new g2o::VertexSE3Expmap();
-
-        // 是否需要定义新的顶点, 可以固定 pitch yaw 和 高度的
-        g2o::VertexSE3Fix *vObj = new g2o::VertexSE3Fix;
-        vObj->setEstimate(cube_pose.pose);
-        vObj->whether_fixheight = false;
-        vObj->whether_fixrollpitch = true;
-        vObj->setId(i);
-        vObj->setFixed(false);
-        optimizer.addVertex(vObj);
-        Object_temp->mmBAFrameIdAndObjVertexID[pFrame->mnId] = i;
-    }
-
-    int nTotalEdges = 0;
-    const float deltaMono = sqrt(5.991);
-    const float deltaStereo = sqrt(7.815);
-    // 单目
-    vector<vector<g2o::EdgeSE3ProjectXYZOnlyPose*>> veMonoEdges; // 分目标存储
-    vector<vector<size_t>> vnMonoPointVertex;
-    veMonoEdges.resize(pMObjects.size());
-    vnMonoPointVertex.resize(pMObjects.size());
-    // 双目
-    vector<vector<g2o::EdgeStereoSE3ProjectXYZOnlyPose*>> veStereoEdges;
-    vector<vector<size_t>> vnStereoPointVertex;
-    vnStereoPointVertex.resize(pMObjects.size());
-    veStereoEdges.resize(pMObjects.size());
-    vector<std::size_t> vnInitialCorrespondences(pMObjects.size(), 0);
-    for(size_t i=0; i<pMObjects.size(); i++)
-    {
-        MapObject* mObjectTmp  = pMObjects[i];
-        //DetectionObject* cCuboidTmp = vcCuboids[i];
-        size_t nInFrameDetObjOrder = vnInFrameOrder[i];
-        // 设置目标点-目标， 目标点-目标-相机 的条件是：(二折需要同时满足)
-        // 1. 该目标不是该帧建立
-        // 2. 该目标的目标点比较多
-        if(mObjectTmp->mnFirstObservationFrameId ==pFrame->mnId)
-        {
-            cout<<"目标"<<mObjectTmp->mnTruthID<<" 是当前帧"<<pFrame->mnId<<" 建立, 不应用来优化!"<<endl;
-            assert(0);
-        }
-
-
-        if(!mObjectTmp->mmBAFrameIdAndObjVertexID.count(pFrame->mnId))
-        {
-            cout<<"该object的顶点设置错误！"<<endl;
-            assert(0);
-        }
-        //vector<MapObjectPoint*> vpMapPointTmp = cCuboidTmp->GetInFrameMapObjectPoints();
-        vector<MapObjectPoint*> vpMapPointTmp = pFrame->mvpMapObjectPoints[nInFrameDetObjOrder];
-        vector<g2o::EdgeSE3ProjectXYZOnlyPose*> veMonoEdgesTmp; // 点投影临时容器
-        vector<g2o::EdgeStereoSE3ProjectXYZOnlyPose*>veStereoEdgesTmp;
-        vector<size_t> vnMonoPointVertexTmp;
-        vector<size_t> vnStereoPointVertexTmp;
-        veMonoEdgesTmp.reserve(vpMapPointTmp.size());
-        veStereoEdgesTmp.reserve(vpMapPointTmp.size());
-        vnMonoPointVertexTmp.reserve(vpMapPointTmp.size());
-        vnStereoPointVertexTmp.reserve(vpMapPointTmp.size());
-        for(size_t j=0; j<vpMapPointTmp.size(); j++)
-        {
-            MapObjectPoint *pMP = vpMapPointTmp[j];
-            if(!pMP)
-                continue;
-            if(pMP->mnFirstFrame == int(pFrame->mnId))// 如果该3D点是当前帧建立 就跳过，因为这个优化没有意义
-                assert(0);
-            if(pFrame->mvuObjKeysRight[nInFrameDetObjOrder][j]<0)// Monocular observation
-            {
-                vnInitialCorrespondences[i]++;
-                pFrame->mvbObjKeysOutlier[nInFrameDetObjOrder][j] = false;
-                Eigen::Matrix<double,2,1> obs;
-                const cv::KeyPoint &kpUn = pFrame->mvObjKeysUn[nInFrameDetObjOrder][j];
-                obs << kpUn.pt.x, kpUn.pt.y;
-                g2o::EdgeSE3ProjectXYZOnlyPose* e = new g2o::EdgeSE3ProjectXYZOnlyPose();//TODO 其中如果没有定义linearizeOplus()函数,则会直接调用数值求导,运算会比较慢
-                e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(mObjectTmp->mmBAFrameIdAndObjVertexID[pFrame->mnId])));
-                e->setMeasurement(obs);
-                const float invSigma2 = pFrame->mvInvLevelSigma2[kpUn.octave];
-                e->setInformation(Eigen::Matrix2d::Identity()*invSigma2);
-                g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
-                e->setRobustKernel(rk);
-                rk->setDelta(deltaMono);
-                e->fx = pFrame->fx;
-                e->fy = pFrame->fy;
-                e->cx = pFrame->cx;
-                e->cy = pFrame->cy;
-                cv::Mat Xw = pMP->GetInObjFramePosition(); // Tco * Poj
-                e->Xw[0] = Xw.at<float>(0);
-                e->Xw[1] = Xw.at<float>(1);
-                e->Xw[2] = Xw.at<float>(2);
-                optimizer.addEdge(e);
-                nTotalEdges++;
-                veMonoEdgesTmp.push_back(e);
-                vnMonoPointVertexTmp.push_back(j);
-            }
-            else  // Stereo observation
-            {
-                vnInitialCorrespondences[i]++;
-                pFrame->mvbObjKeysOutlier[nInFrameDetObjOrder][j] = false;
-                Eigen::Matrix<double,3,1> obs;
-                const cv::KeyPoint &kpUn = pFrame->mvObjKeysUn[nInFrameDetObjOrder][j];
-                const float &kp_ur = pFrame->mvuObjKeysRight[nInFrameDetObjOrder][j];
-                obs << kpUn.pt.x, kpUn.pt.y, kp_ur;
-                g2o::EdgeStereoSE3ProjectXYZOnlyPose* e = new g2o::EdgeStereoSE3ProjectXYZOnlyPose();
-                e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(mObjectTmp->mmBAFrameIdAndObjVertexID[pFrame->mnId])));
-                e->setMeasurement(obs);
-                const float invSigma2 = pFrame->mvInvLevelSigma2[kpUn.octave];
-                Eigen::Matrix3d Info = Eigen::Matrix3d::Identity()*invSigma2;
-                e->setInformation(Info);
-                g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
-                e->setRobustKernel(rk);
-                rk->setDelta(deltaStereo);
-                e->fx = pFrame->fx;
-                e->fy = pFrame->fy;
-                e->cx = pFrame->cx;
-                e->cy = pFrame->cy;
-                e->bf = pFrame->mbf;
-                cv::Mat Xw = pMP->GetInObjFramePosition();
-                e->Xw[0] = Xw.at<float>(0);
-                e->Xw[1] = Xw.at<float>(1);
-                e->Xw[2] = Xw.at<float>(2);
-                optimizer.addEdge(e);
-                nTotalEdges++;
-                veStereoEdgesTmp.push_back(e);
-                vnStereoPointVertexTmp.push_back(j);
-            }
-        }
-        veStereoEdges[i] = (veStereoEdgesTmp);
-        veMonoEdges[i] = (veMonoEdgesTmp);
-        vnMonoPointVertex[i] = (vnMonoPointVertexTmp);
-        vnStereoPointVertex[i] = (vnStereoPointVertexTmp);
-    }
-    if(nTotalEdges<15)//15
-        return false;
-    cout<<"优化边数:"<<nTotalEdges<<endl;
-    const float chi2Mono[4]={5.991,5.991,5.991,5.991};
-    const float chi2Stereo[4]={7.815,7.815,7.815, 7.815};
-    const int its[4]={10,10,10,10};
-    vector<size_t> vnBads(pMObjects.size(), 0);
-    for(size_t it=0; it<4; it++)
-    {
-        optimizer.initializeOptimization(0);
-        optimizer.setVerbose(bVerbose);
-        optimizer.optimize(its[it]);
-        double chi2total = 0;
-        vnBads = vector<size_t>(pMObjects.size(), 0);
-        for(size_t i=0; i<pMObjects.size(); i++)
-        {
-            int nInFrameDetObjOrder = vnInFrameOrder[i];
-            for(size_t j=0; j<veMonoEdges[i].size(); j++) // 单目投影
-            {
-                g2o::EdgeSE3ProjectXYZOnlyPose* e = veMonoEdges[i][j];
-                const size_t idx = vnMonoPointVertex[i][j];
-                if (pFrame->mvbObjKeysOutlier[nInFrameDetObjOrder][idx]) // 为true, 计算该边的误差
-                {
-                    e->computeError();// NOTE g2o只会计算active edge的误差
-                }
-                else
-                {
-                    chi2total = e->chi2() + chi2total;
-                }
-                const float chi2 = e->chi2();
-                if(1)
-                {
-                    if (chi2 > chi2Mono[it])
-                    {
-                        pFrame->mvbObjKeysOutlier[nInFrameDetObjOrder][idx] = true;
-                        e->setLevel(1);// 设置为outlier
-                        vnBads[i]++;
-                    }
-                    else {
-                        pFrame->mvbObjKeysOutlier[nInFrameDetObjOrder][idx] = false;
-                        e->setLevel(0);// 设置为inlier
-                    }
-                    if (it == 2)
-                    {
-                        e->setRobustKernel(0);// 除了前两次优化需要RobustKernel以外, 其余的优化都不需要
-                    }
-                }
-            }
-            for(size_t j=0; j<veStereoEdges[i].size(); j++) // 双目投影
-            {
-                g2o::EdgeStereoSE3ProjectXYZOnlyPose* e = veStereoEdges[i][j];
-                const size_t idx = vnStereoPointVertex[i][j];
-                if (pFrame->mvbObjKeysOutlier[nInFrameDetObjOrder][idx])
-                {
-                    e->computeError();
-                }
-                else
-                {
-                    chi2total = e->chi2() + chi2total;
-                }
-                const float chi2 = e->chi2();
-                if(1)
-                {
-                    if (chi2 > chi2Stereo[it])
-                    {
-                        pFrame->mvbObjKeysOutlier[nInFrameDetObjOrder][idx] = true;
-                        e->setLevel(1);
-                        vnBads[i]++;
-                    }
-                    else {
-                        pFrame->mvbObjKeysOutlier[nInFrameDetObjOrder][idx] = false;
-                        e->setLevel(0);
-                    }
-                    if (it == 2)
-                    {
-                        e->setRobustKernel(0);
-                    }
-                }
-            }
-        }
-    }
-
-    for(auto &m: vnBads)
-    {
-        cout<<"坏点数: "<<m<<endl;
-    }
-
-    if(1)
-    {
-        for(size_t i=0; i<pMObjects.size();i++)
-        {
-            MapObject *Object_temp = pMObjects[i];
-            //DetectionObject* CuboidTmp = vcCuboids[i];
-            //vector<MapObjectPoint* > vpMOPs = CuboidTmp->GetInFrameMapObjectPoints();
-            vector<MapObjectPoint* > vpMOPs = pFrame->mvpMapObjectPoints[vnInFrameOrder[i]];
-            g2o::VertexSE3Fix* vObject = dynamic_cast<g2o::VertexSE3Fix*>(optimizer.vertex(Object_temp->mmBAFrameIdAndObjVertexID[pFrame->mnId]));
-            if(vObject)
-            {
-                // 优化前误差: 比较在相机系下的结果
-                //g2o::ObjectState PoseTruth = CuboidTmp->mTruthPosInCameraFrame;
-                g2o::ObjectState PoseBeforeOptimize = Object_temp->GetCFInFrameObjState(pFrame->mnId); // 注意这是世界系
-                //g2o::SE3Quat PoseErrBefore = PoseTruth.pose.inverse() * PoseBeforeOptimize.pose;
-                //cout<<Object_temp->mnTruthID<<"优化前误差："<< PoseErrBefore.toMinimalVector()<<endl;
-                cout<<Object_temp->mnTruthID<<"优化前pose："<< PoseBeforeOptimize.pose<<endl;
-                // 优化后误差
-                g2o::SE3Quat PoseAfterOptimize = vObject->estimate();
-                //g2o::SE3Quat PoseErrAfter = PoseTruth.pose.inverse() * PoseAfterOptimize;
-                //cout<<Object_temp->mnTruthID<<"优化后误差："<<PoseErrAfter.toMinimalVector()<<endl;
-                cout<<Object_temp->mnTruthID<<"优化后pose："<<PoseAfterOptimize<<endl;
-                g2o::ObjectState Swo(pFrame->mSETcw.inverse() * vObject->estimate(), PoseBeforeOptimize.scale);
-                Object_temp->SetInFrameObjState(Swo, pFrame->mnId);
-                Object_temp->SetCFInFrameObjState(g2o::ObjectState(vObject->estimate(), PoseBeforeOptimize.scale), pFrame->mnId);
-                Object_temp->SetHaveBeenOptimizedInFrameFlag();
-            }
-        }
-    }
-    return true;
-}
-
-int Optimizer::ObjSta2DAndScaleOptimization(Frame *pFrame, const vector<std::size_t> &vnNeedToBeOptimized, const bool &bVerbose)
-{
-    g2o::SparseOptimizer optimizer;
-    g2o::BlockSolver_6_3::LinearSolverType * linearSolver;
-    linearSolver = new g2o::LinearSolverDense<g2o::BlockSolver_6_3::PoseMatrixType>();
-    g2o::BlockSolver_6_3 * solver_ptr = new g2o::BlockSolver_6_3(linearSolver);
-    g2o::OptimizationAlgorithmLevenberg* solver = new g2o::OptimizationAlgorithmLevenberg(solver_ptr);
-    optimizer.setAlgorithm(solver);
-    typedef g2o::VertexCuboidFixScale g2o_object_vertex;
-    typedef g2o::EdgeSE3OnlyCuboidFixScaleProj g2o_camera_obj_2d_edge;
-
-    std::vector<MapObject *> pMObjects;
-    std::vector<DetectionObject *> vcCuboids;
-    for(size_t i=0; i<vnNeedToBeOptimized.size(); i++)
-    {
-        size_t n = vnNeedToBeOptimized[i];
-        MapObject* mMapObjectTmp = pFrame->mvMapObjects[n];
-        DetectionObject* cCuboidTmp = pFrame->mvDetectionObjects[n];
-        if(!(cCuboidTmp->mbGoodDetFlag == true && mMapObjectTmp->mbScaleIsKnownAndPreciseFlag == true))
-            continue;
-        if(mMapObjectTmp==NULL) // 如果该目标不存在
-            assert(0);
-        vcCuboids.push_back(cCuboidTmp);
-        pMObjects.push_back(mMapObjectTmp);
-    }
-
-    if(pMObjects.size()==0)
-        return false;
-    for(size_t i=0; i<pMObjects.size();i++)// Set Frame vertex
-    {
-        DetectionObject* dObj = vcCuboids[i];
-        MapObject *Object_temp = pMObjects[i];
-
-        Object_temp->mmBAFrameIdAndObjVertexID.clear();
-        g2o::ObjectState cube_pose = Object_temp->GetCFInFrameObjState(pFrame->mnId);
-
-        g2o_object_vertex *vObj = new g2o_object_vertex();
-        vObj->setEstimate(cube_pose);
-        vObj->whether_fixheight = false;
-        vObj->whether_fixrollpitch = true;
-        vObj->fixedscale = dObj->mScale;
-        cout<<"obj scale:"<<vObj->fixedscale;
-        vObj->setId(i);
-        vObj->setFixed(false);
-        optimizer.addVertex(vObj);
-        Object_temp->mmBAFrameIdAndObjVertexID[pFrame->mnId] = i;
-    }
-
-    int nTotalEdges = 0;
-    vector<g2o_camera_obj_2d_edge *> veBBoxEdges;// 2D 投影, 可以改成双目2D投影
-    //vector<vector<size_t>> vnIndexCuboidBBox;
-    veBBoxEdges.resize(pMObjects.size());
-    //vnIndexCuboidBBox.reserve(pMObjects.size());
-
-
-
-    for(size_t i=0; i<pMObjects.size(); i++)
-    {
-        MapObject *Object_temp = pMObjects[i];
-        DetectionObject *obs_cuboid = vcCuboids[i];
-
-        if(!Object_temp->mmBAFrameIdAndObjVertexID.count(pFrame->mnId))
-        {
-            cout<<"该object的顶点设置错误！"<<endl;
-            assert(0);
-        }
-
-        Eigen::Vector4d inv_sigma;
-        inv_sigma.setOnes();
-        inv_sigma = inv_sigma * EdBBoxBAWeight;
-        Eigen::Matrix4d camera_object_sigma = inv_sigma.cwiseProduct(inv_sigma).asDiagonal();
-        obs_cuboid->mbBBoxOutlier = false;
-        g2o_camera_obj_2d_edge  *e = new g2o_camera_obj_2d_edge();
-        e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex *>(optimizer.vertex(Object_temp->mmBAFrameIdAndObjVertexID[pFrame->mnId])));
-        e->setMeasurement(Eigen::Vector4d(obs_cuboid->mrectBBox.x + obs_cuboid->mrectBBox.width/2, obs_cuboid->mrectBBox.y + obs_cuboid->mrectBBox.height/2,  obs_cuboid->mrectBBox.width, obs_cuboid->mrectBBox.height));
-        e->Tcw.fromMinimalVector(Eigen::Matrix<double, 6, 1>::Zero());
-        e->Kalib = EdCamProjMatrix;
-        e->setInformation(camera_object_sigma * obs_cuboid->mdMeasQuality * obs_cuboid->mdMeasQuality);
-        g2o::RobustKernelHuber *rk = new g2o::RobustKernelHuber;
-        e->setRobustKernel(rk);
-        rk->setDelta(EdBBoxThHuber);
-        if(0)
-        {
-            cv::Mat image = pFrame->mRawImg;
-            cv::Rect bbox_2d = obs_cuboid->mrectBBox;
-            cv::rectangle(image, bbox_2d, cv::Scalar(255, 255, 0), 2);
-            cv::imshow("2D检测", image);
-            cv::waitKey(0);
-        }
-        nTotalEdges++;
-        optimizer.addEdge(e);
-        veBBoxEdges[i] = e;
-    }
-    if(nTotalEdges<1)//15
-        return false;
-
-
-    vector<size_t> vnBads(pMObjects.size(), 0);
-
-    optimizer.initializeOptimization(0);
-    optimizer.setVerbose(bVerbose);
-    optimizer.optimize(15);
-
-
-    for(size_t i=0, iend = veBBoxEdges.size(); i <iend; i++)
-    {
-        g2o_camera_obj_2d_edge  *e = veBBoxEdges[i];
-        if(e == NULL)
-            continue;
-        DetectionObject* cCuboidTmp = vcCuboids[i];
-        const float chi2 = e->chi2();
-        if(chi2 > 80)
-        {
-            cCuboidTmp->mbBBoxOutlier = true; // 怎么处理该object
-        }
-    }
-
-
-    for(size_t i=0; i<pMObjects.size();i++)
-    {
-        MapObject *Object_temp = pMObjects[i];
-        //DetectionObject* CuboidTmp = vcCuboids[i];
-        g2o_object_vertex * vObject = dynamic_cast<g2o_object_vertex*>(optimizer.vertex(Object_temp->mmBAFrameIdAndObjVertexID[pFrame->mnId]));
-        if(vObject)
-        {
-            // 优化前误差: 比较在相机系下的结果
-            //g2o::ObjectState PoseTruth = CuboidTmp->mTruthPosInCameraFrame;
-            g2o::ObjectState PoseBeforeOptimize = Object_temp->GetCFInFrameObjState(pFrame->mnId); // 注意这是世界系
-            //g2o::SE3Quat PoseErrBefore = PoseTruth.pose.inverse() * PoseBeforeOptimize.pose;
-            //cout<<Object_temp->mnTruthID<<"优化前误差："<< PoseErrBefore.toMinimalVector()<<endl;
-            cout<<Object_temp->mnTruthID<<"优化前pose："<< PoseBeforeOptimize.pose<<endl;
-            // 优化后误差
-            g2o::ObjectState PoseAfterOptimize = vObject->estimate();
-            //g2o::SE3Quat PoseErrAfter = PoseTruth.pose.inverse() * PoseAfterOptimize.pose;
-            //cout<<Object_temp->mnTruthID<<"优化后误差："<<PoseErrAfter.toMinimalVector()<<endl;
-            cout<<Object_temp->mnTruthID<<"优化后pose："<<PoseAfterOptimize.pose<<endl;
-            g2o::ObjectState Swo(pFrame->mSETcw.inverse() * vObject->estimate().pose, PoseBeforeOptimize.scale);
-            Object_temp->SetInFrameObjState(Swo, pFrame->mnId);
-            Object_temp->SetCFInFrameObjState(g2o::ObjectState(vObject->estimate()), pFrame->mnId);
-            Object_temp->SetHaveBeenOptimizedInFrameFlag();
-        }
-    }
-
-    return true;
-}
-
-void Optimizer::SE3ObjectLocalBundleAdjustment(ObjectKeyFrame *pKF, const bool &bVerbose)
-{
-
-//    cout<<YELLOW<<"目标"<<pKF->mpMapObjects->mnTruthID<<" 关键帧:"<<pKF->mnId<<" "<<pKF->mnFrameId<<" 优化开始"<<endl;
-//    cout<<WHITE<<endl;
-
-    list<ObjectKeyFrame *> lLocalKeyFrames;  // 得到需要优化的共视关键帧
-    lLocalKeyFrames.push_back(pKF);
-    pKF->mnBALocalForKF = pKF->mnId;
-    const vector<ObjectKeyFrame *> vNeighKFs = pKF->GetVectorCovisibleKeyFrames();
-    for (int i = 0, iend = vNeighKFs.size(); i < iend; i++)
-    {
-        ObjectKeyFrame *pKFi = vNeighKFs[i];
-        pKFi->mnBALocalForKF = pKF->mnId;
-        if (!pKFi->isBad())
-            lLocalKeyFrames.push_back(pKFi);
-    }
-
-    list<MapObjectPoint *> lLocalMapPoints; // 得到需要优化的共视关键帧的目标点们
-    for (list<ObjectKeyFrame *>::iterator lit = lLocalKeyFrames.begin(), lend = lLocalKeyFrames.end(); lit != lend; lit++)
-    {
-        vector<MapObjectPoint *> vpMPs = (*lit)->GetMapObjectPointMatches();
-        for (vector<MapObjectPoint *>::iterator vit = vpMPs.begin(), vend = vpMPs.end(); vit != vend; vit++)
-        {
-            MapObjectPoint *pMP = *vit;
-            if (pMP)
-                if (!pMP->isBad())
-                    if (pMP->mnBALocalForKF != pKF->mnId) // mnBALocalForKF  mnBAFixedForKF are marker
-                    {
-                        lLocalMapPoints.push_back(pMP);
-                        pMP->mnBALocalForKF = pKF->mnId;// 防止重复添加
-                    }
-        }
-    }
-
-    list<ObjectKeyFrame*> lFixedCameras; // 目标点的所有观测除了上述关键帧外的关键帧作为固定帧
-    for(list<MapObjectPoint*>::iterator lit=lLocalMapPoints.begin(), lend=lLocalMapPoints.end(); lit!=lend; lit++)
-    {
-        map<ObjectKeyFrame*,size_t> observations = (*lit)->GetObservations();
-        for(map<ObjectKeyFrame*,size_t>::iterator mit=observations.begin(), mend=observations.end(); mit!=mend; mit++)
-        {
-            ObjectKeyFrame* pKFi = mit->first;
-
-            if(pKFi->mnBALocalForKF!=pKF->mnId && pKFi->mnBAFixedForKF!=pKF->mnId)
-            {
-                pKFi->mnBAFixedForKF=pKF->mnId;
-                if(!pKFi->isBad())
-                    lFixedCameras.push_back(pKFi);
-            }
-        }
-    }
-
-    g2o::SparseOptimizer optimizer; // 优化器
-    g2o::BlockSolver_6_3::LinearSolverType * linearSolver;
-    linearSolver = new g2o::LinearSolverEigen<g2o::BlockSolver_6_3::PoseMatrixType>();
-    g2o::BlockSolver_6_3 * solver_ptr = new g2o::BlockSolver_6_3(linearSolver);
-    g2o::OptimizationAlgorithmLevenberg* solver = new g2o::OptimizationAlgorithmLevenberg(solver_ptr);
-    optimizer.setAlgorithm(solver);
-
-    unsigned long maxKFid = 0; // 需优化关键帧与固定关键帧顶点
-    for(list<ObjectKeyFrame*>::iterator lit=lLocalKeyFrames.begin(), lend=lLocalKeyFrames.end(); lit!=lend; lit++)
-    {
-        ObjectKeyFrame* pKFi = *lit;
-        g2o::VertexSE3Expmap * vSE3 = new g2o::VertexSE3Expmap();
-        //g2o::VertexSE3Fix * vSE3 = new g2o::VertexSE3Fix();
-        //vSE3->whether_fixheight = true;
-        //vSE3->whether_fixrollpitch = true;
-        vSE3->setEstimate(Converter::toSE3Quat(pKFi->GetPose()));
-        vSE3->setId(pKFi->mnId);
-        vSE3->setFixed(pKFi->mnId==0);
-        optimizer.addVertex(vSE3);
-        if(pKFi->mnId>maxKFid)
-            maxKFid=pKFi->mnId;
-    }
-    for(list<ObjectKeyFrame*>::iterator lit=lFixedCameras.begin(), lend=lFixedCameras.end(); lit!=lend; lit++)
-    {
-        ObjectKeyFrame* pKFi = *lit;
-        g2o::VertexSE3Expmap * vSE3 = new g2o::VertexSE3Expmap();
-        vSE3->setEstimate(Converter::toSE3Quat(pKFi->GetPose()));
-        vSE3->setId(pKFi->mnId);
-        vSE3->setFixed(true);
-        optimizer.addVertex(vSE3);
-        if(pKFi->mnId>maxKFid)
-            maxKFid=pKFi->mnId;
-    }
-
-    const int nExpectedSize = (lLocalKeyFrames.size()+lFixedCameras.size())*lLocalMapPoints.size(); // 相关容器
-    vector<g2o::EdgeSE3ProjectXYZ*> vpEdgesMono;
-    vpEdgesMono.reserve(nExpectedSize);
-    vector<ObjectKeyFrame*> vpEdgeKFMono;
-    vpEdgeKFMono.reserve(nExpectedSize);
-    vector<MapObjectPoint*> vpMapPointEdgeMono;
-    vpMapPointEdgeMono.reserve(nExpectedSize);
-    vector<g2o::EdgeStereoSE3ProjectXYZ*> vpEdgesStereo;
-    vpEdgesStereo.reserve(nExpectedSize);
-    vector<ObjectKeyFrame*> vpEdgeKFStereo;
-    vpEdgeKFStereo.reserve(nExpectedSize);
-    vector<MapObjectPoint*> vpMapPointEdgeStereo;
-    vpMapPointEdgeStereo.reserve(nExpectedSize);
-
-    const float thHuberMono = sqrt(5.991);
-    const float thHuberStereo = sqrt(7.815); //优化目标点顶点 与 边设置
-    for(list<MapObjectPoint*>::iterator lit=lLocalMapPoints.begin(), lend=lLocalMapPoints.end(); lit!=lend; lit++) {
-        MapObjectPoint *pMP = *lit;
-        g2o::VertexSBAPointXYZ *vPoint = new g2o::VertexSBAPointXYZ();
-        vPoint->setEstimate(pMP->GetInObjFrameEigenPosition());
-        int id = pMP->mnId + maxKFid + 1;
-        vPoint->setId(id);
-        vPoint->setMarginalized(true);
-        optimizer.addVertex(vPoint);
-        const map<ObjectKeyFrame *, size_t> observations = pMP->GetObservations();
-        //Set edges
-        for (map<ObjectKeyFrame *, size_t>::const_iterator mit = observations.begin(), mend = observations.end();
-             mit != mend; mit++) {
-            ObjectKeyFrame *pKFi = mit->first;
-            if (!pKFi->isBad()) {
-                const cv::KeyPoint &kpUn = pKFi->mvObjKeysUn[mit->second];
-                // Monocular observation
-                if (pKFi->mvuObjKeysRight[mit->second] < 0) {
-                    Eigen::Matrix<double, 2, 1> obs;
-                    obs << kpUn.pt.x, kpUn.pt.y;
-                    g2o::EdgeSE3ProjectXYZ *e = new g2o::EdgeSE3ProjectXYZ();
-                    e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex *>(optimizer.vertex(id)));
-                    e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex *>(optimizer.vertex(pKFi->mnId)));
-                    e->setMeasurement(obs);
-                    const float &invSigma2 = pKFi->mvInvLevelSigma2[kpUn.octave];
-                    e->setInformation(Eigen::Matrix2d::Identity() * invSigma2);
-                    g2o::RobustKernelHuber *rk = new g2o::RobustKernelHuber;
-                    e->setRobustKernel(rk);
-                    rk->setDelta(thHuberMono);
-                    e->fx = pKFi->fx;
-                    e->fy = pKFi->fy;
-                    e->cx = pKFi->cx;
-                    e->cy = pKFi->cy;
-                    optimizer.addEdge(e);
-                    vpEdgesMono.push_back(e);
-                    vpEdgeKFMono.push_back(pKFi);
-                    vpMapPointEdgeMono.push_back(pMP);
-                }
-                else // Stereo observation
-                {
-                    Eigen::Matrix<double, 3, 1> obs;
-                    const float kp_ur = pKFi->mvuObjKeysRight[mit->second];
-                    obs << kpUn.pt.x, kpUn.pt.y, kp_ur;
-                    g2o::EdgeStereoSE3ProjectXYZ *e = new g2o::EdgeStereoSE3ProjectXYZ();
-                    e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex *>(optimizer.vertex(id)));
-                    e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex *>(optimizer.vertex(pKFi->mnId)));
-                    e->setMeasurement(obs);
-                    const float &invSigma2 = pKFi->mvInvLevelSigma2[kpUn.octave];
-                    Eigen::Matrix3d Info = Eigen::Matrix3d::Identity() * invSigma2;
-                    e->setInformation(Info);
-                    g2o::RobustKernelHuber *rk = new g2o::RobustKernelHuber;
-                    e->setRobustKernel(rk);
-                    rk->setDelta(thHuberStereo);
-                    e->fx = pKFi->fx;
-                    e->fy = pKFi->fy;
-                    e->cx = pKFi->cx;
-                    e->cy = pKFi->cy;
-                    e->bf = pKFi->mbf;
-                    optimizer.addEdge(e);
-                    vpEdgesStereo.push_back(e);
-                    vpEdgeKFStereo.push_back(pKFi);
-                    vpMapPointEdgeStereo.push_back(pMP);
-                }
-            }
-        }
-    }
-
-    optimizer.initializeOptimization();
-    optimizer.setVerbose(bVerbose);
-    optimizer.optimize(5);
-
-    for(size_t i=0, iend=vpEdgesMono.size(); i<iend;i++)
-    {
-        g2o::EdgeSE3ProjectXYZ* e = vpEdgesMono[i];
-        MapObjectPoint* pMP = vpMapPointEdgeMono[i];
-        if(pMP->isBad())
-            continue;
-        if(e->chi2()>5.991 || !e->isDepthPositive())
-        {
-            e->setLevel(1);
-        }
-        e->setRobustKernel(0);
-    }
-    for(size_t i=0, iend=vpEdgesStereo.size(); i<iend;i++)
-    {
-        g2o::EdgeStereoSE3ProjectXYZ* e = vpEdgesStereo[i];
-        MapObjectPoint* pMP = vpMapPointEdgeStereo[i];
-
-        if(pMP->isBad())
-            continue;
-        if(e->chi2()>7.815 || !e->isDepthPositive())
-        {
-            e->setLevel(1);
-        }
-        e->setRobustKernel(0);
-    }
-    optimizer.initializeOptimization(0);
-    optimizer.setVerbose(bVerbose);
-    optimizer.optimize(10);
-
-    vector<pair<ObjectKeyFrame*,MapObjectPoint*> > vToErase;
-    vToErase.reserve(vpEdgesMono.size()+vpEdgesStereo.size());
-    for(size_t i=0, iend=vpEdgesMono.size(); i<iend;i++)
-    {
-        g2o::EdgeSE3ProjectXYZ* e = vpEdgesMono[i];
-        MapObjectPoint* pMP = vpMapPointEdgeMono[i];
-        if(pMP->isBad())
-            continue;
-        if(e->chi2()>5.991 || !e->isDepthPositive())
-        {
-            ObjectKeyFrame* pKFi = vpEdgeKFMono[i];
-            vToErase.push_back(make_pair(pKFi,pMP));
-        }
-    }
-    for(size_t i=0, iend=vpEdgesStereo.size(); i<iend;i++)
-    {
-        g2o::EdgeStereoSE3ProjectXYZ* e = vpEdgesStereo[i];
-        MapObjectPoint* pMP = vpMapPointEdgeStereo[i];
-        if(pMP->isBad())
-            continue;
-        if(e->chi2()>7.815 || !e->isDepthPositive())
-        {
-            ObjectKeyFrame* pKFi = vpEdgeKFStereo[i];
-            vToErase.push_back(make_pair(pKFi,pMP));
-        }
-    }
-    if(!vToErase.empty())
-    {
-        for(size_t i=0;i<vToErase.size();i++)
-        {
-            ObjectKeyFrame* pKFi = vToErase[i].first;
-            MapObjectPoint* pMPi = vToErase[i].second;
-            pKFi->EraseMapPointMatch(pMPi);
-            pMPi->EraseObservation(pKFi);
-        }
-    }
-    MapObject* pMO = pKF->mpMapObjects;
-    for(list<ObjectKeyFrame*>::iterator lit=lLocalKeyFrames.begin(), lend=lLocalKeyFrames.end(); lit!=lend; lit++)
-    {
-        ObjectKeyFrame* pKFTmp = *lit;
-        g2o::VertexSE3Expmap* vSE3 = static_cast<g2o::VertexSE3Expmap*>(optimizer.vertex(pKFTmp->mnId));
-
-        g2o::SE3Quat sE3quat = vSE3->estimate();
-        pKFTmp->SetPose(sE3quat);
-
-        /*
-        cout<<"关键帧"<<pKFTmp->mnFrameId<<" 优化结果打印:"<<endl;
-        if(1)// 关键帧优化误差打印
-        {
-
-            DetectionObject* pDet = pKFTmp->mpDetectionObject;
-            g2o::ObjectState Tco_gt = pDet->mTruthPosInCameraFrame;// 优化前误差: 比较在相机系下的结果
-            g2o::ObjectState Tco_est_before = pMO->GetCFObjectKeyFrameObjState(pKFTmp);
-            g2o::SE3Quat err1 = Tco_gt.pose.inverse() * Tco_est_before.pose;
-            cout<<" 优化前误差："<< err1.toMinimalVector()<<endl;
-            g2o::SE3Quat Tco_est_after = sE3quat;// 优化后误差
-            g2o::SE3Quat err2 = Tco_gt.pose.inverse() * Tco_est_after;
-            cout<<" 优化后误差："<<err2.toMinimalVector()<<endl;
-            //cout<<WHITE;
-        }*/
-
-
-        g2o::ObjectState x(sE3quat, pKFTmp->mScale);
-        pMO->SetCFObjectKeyFrameObjState(pKFTmp, x);
-    }
-    for(list<MapObjectPoint*>::iterator lit=lLocalMapPoints.begin(), lend=lLocalMapPoints.end(); lit!=lend; lit++)
-    {
-        MapObjectPoint* pMP = *lit;
-        g2o::VertexSBAPointXYZ* vPoint = static_cast<g2o::VertexSBAPointXYZ*>(optimizer.vertex(pMP->mnId+maxKFid+1));
-        pMP->SetInObjFramePosition(Converter::toCvMat(vPoint->estimate()));
-        pMP->UpdateNormalAndDepth();
-    }
 }
 
 void Optimizer::ObjectLocalBundleAdjustment(ObjectKeyFrame *pKF, const bool &bVerbose)
@@ -1511,7 +782,7 @@ void Optimizer::ObjectLocalBundleAdjustment(ObjectKeyFrame *pKF, const bool &bVe
             lLocalKeyFrames.push_back(pKFi);
     }
 
-    list<MapObjectPoint *> lLocalMapPoints; // 得到需要优化的共视关键帧的目标点们
+    list<MapObjectPoint *> lLocalMapPoints;
     for (list<ObjectKeyFrame *>::iterator lit = lLocalKeyFrames.begin(), lend = lLocalKeyFrames.end(); lit != lend; lit++)
     {
         vector<MapObjectPoint *> vpMPs = (*lit)->GetMapObjectPointMatches();
@@ -1523,12 +794,12 @@ void Optimizer::ObjectLocalBundleAdjustment(ObjectKeyFrame *pKF, const bool &bVe
                     if (pMP->mnBALocalForKF != pKF->mnId) // mnBALocalForKF  mnBAFixedForKF are marker
                     {
                         lLocalMapPoints.push_back(pMP);
-                        pMP->mnBALocalForKF = pKF->mnId;// 防止重复添加
+                        pMP->mnBALocalForKF = pKF->mnId;
                     }
         }
     }
 
-    list<ObjectKeyFrame*> lFixedCameras; // 目标点的所有观测除了上述关键帧外的关键帧作为固定帧
+    list<ObjectKeyFrame*> lFixedCameras;
     for(list<MapObjectPoint*>::iterator lit=lLocalMapPoints.begin(), lend=lLocalMapPoints.end(); lit!=lend; lit++)
     {
         map<ObjectKeyFrame*,size_t> observations = (*lit)->GetObservations();
@@ -1546,7 +817,7 @@ void Optimizer::ObjectLocalBundleAdjustment(ObjectKeyFrame *pKF, const bool &bVe
         }
     }
 
-    g2o::SparseOptimizer optimizer; // 优化器
+    g2o::SparseOptimizer optimizer;
     g2o::BlockSolver_6_3::LinearSolverType * linearSolver;
     linearSolver = new g2o::LinearSolverEigen<g2o::BlockSolver_6_3::PoseMatrixType>();
     g2o::BlockSolver_6_3 * solver_ptr = new g2o::BlockSolver_6_3(linearSolver);
@@ -1557,7 +828,7 @@ void Optimizer::ObjectLocalBundleAdjustment(ObjectKeyFrame *pKF, const bool &bVe
     vector<vector<int>> vvPointEdges;
 
 
-    unsigned long maxKFid = 0; // 需优化关键帧与固定关键帧顶点
+    unsigned long maxKFid = 0;
     for(list<ObjectKeyFrame*>::iterator lit=lLocalKeyFrames.begin(), lend=lLocalKeyFrames.end(); lit!=lend; lit++)
     {
         ObjectKeyFrame* pKFi = *lit;
@@ -1585,7 +856,7 @@ void Optimizer::ObjectLocalBundleAdjustment(ObjectKeyFrame *pKF, const bool &bVe
             maxKFid=pKFi->mnId;
     }
 
-    const int nExpectedSize = (lLocalKeyFrames.size()+lFixedCameras.size())*lLocalMapPoints.size(); // 相关容器
+    const int nExpectedSize = (lLocalKeyFrames.size()+lFixedCameras.size())*lLocalMapPoints.size();
     vector<g2o::EdgeSE3ProjectXYZ*> vpEdgesMono;
     vpEdgesMono.reserve(nExpectedSize);
     vector<ObjectKeyFrame*> vpEdgeKFMono;
@@ -1600,7 +871,7 @@ void Optimizer::ObjectLocalBundleAdjustment(ObjectKeyFrame *pKF, const bool &bVe
     vpMapPointEdgeStereo.reserve(nExpectedSize);
 
     const float thHuberMono = sqrt(5.991);
-    const float thHuberStereo = sqrt(7.815); //优化目标点顶点 与 边设置
+    const float thHuberStereo = sqrt(7.815);
 
 
     for(list<MapObjectPoint*>::iterator lit=lLocalMapPoints.begin(), lend=lLocalMapPoints.end(); lit!=lend; lit++) {
@@ -1778,17 +1049,14 @@ void Optimizer::ObjectLocalBundleAdjustment(ObjectKeyFrame *pKF, const bool &bVe
             double E = PoseTruth.pose.toMinimalVector().norm();
             auto deltaE1 = PoseErrBefore.toMinimalVector();
             double Rel_error = deltaE1.norm()/E * 100;
-            cout<<RED<<"目标关键帧"<<pKFTmp->mnFrameId<<"  优化边个数:"<<num
-            <<"\n优化前误差："<<Rel_error<<"%, "<< PoseErrBefore.toMinimalVector().transpose()<<endl;
+            cout<<RED<<"Object Keyframe"<<pKFTmp->mnFrameId<<"  edges:"<<num
+            <<"\nerror before optimization："<<Rel_error<<"%, "<< PoseErrBefore.toMinimalVector().transpose()<<endl;
             auto deltaE2 = PoseErrAfter.toMinimalVector();
             Rel_error = deltaE2.norm()/E * 100;
-            cout<<"优化后误差: "<<Rel_error<<"%, "<<PoseErrAfter.toMinimalVector().transpose()<<endl;
+            cout<<"errror after optimization: "<<Rel_error<<"%, "<<PoseErrAfter.toMinimalVector().transpose()<<endl;
             cout<<WHITE;
         }
 
-        //cout<<RED<<"目标关键帧"<<pKFTmp->mnFrameId<<" 优化前Pose: "<<pKFTmp->mTco<<endl;
-        //cout<<"优化后Pose: "<<sE3quat<<endl;
-        //cout<<WHITE;
 
 
         pKFTmp->SetPose(sE3quat);
@@ -1826,13 +1094,7 @@ void Optimizer::LocalBundleAdjustment(KeyFrame *pKF, bool* pbStopFlag, Map* pMap
         }
 
     }
-//    cout<<YELLOW<<pKF->mnId<<": 打印相机weight "<<endl;
-//    for(int i=0; i<vNeighKFs.size(); i++)
-//    {
-//        int weight = pKF->GetWeight(vNeighKFs[i]);
-//        cout<<weight<<" ";
-//    }
-//    cout<<WHITE<<endl;
+
 
     // Local MapPoints seen in Local KeyFrames
     list<MapPoint*> lLocalMapPoints;
@@ -2028,7 +1290,7 @@ void Optimizer::LocalBundleAdjustment(KeyFrame *pKF, bool* pbStopFlag, Map* pMap
         if(*pbStopFlag)
             return;
 
-    //cout<<"Localmapping 2 : 相机+静态点： 边数: "<<optimizer.edges().size()<<endl;
+
     //optimizer.setVerbose(true);
     optimizer.initializeOptimization();
     optimizer.optimize(5);
@@ -2138,40 +1400,6 @@ void Optimizer::LocalBundleAdjustment(KeyFrame *pKF, bool* pbStopFlag, Map* pMap
         KeyFrame* pKF = *lit;
         g2o::VertexSE3Expmap* vSE3 = static_cast<g2o::VertexSE3Expmap*>(optimizer.vertex(pKF->mnId));
         g2o::SE3Quat SE3quat = vSE3->estimate();
-//        if (EnDataSetNameNum<=1) {
-//            for (auto &i: vKFEdges) {
-//                if (i.first == pKF->mnId) {
-//                    cout << RED << "相机关键帧" << i.first << " 优化边个数: " << i.second << endl;
-//                    break;
-//                }
-//            }
-//            g2o::SE3Quat TruePose = Converter::toSE3Quat(OfflineFramePoses[pKF->mnFrameId]);
-//            // Umeyama alignment and inverse transform
-//            // GPS/IMU与 visual 坐标系不同
-//            Eigen::Matrix<double,4,4> alignment = Eigen::Matrix<double,4,4>::Identity();
-////            alignment<<-0.00622326, -0.99216644, 0.12476793, -0.13131138,
-////             0.00805024, -0.12481601, -0.99214725, 0.28329853,
-////             0.99994823, -0.00516998,  0.00876394, 2.63234767,
-////             0,0,0,1;
-//              alignment<<0,-1,0,0,
-//              0,0,1,0,
-//              -1,0,0,0,
-//              0,0,0,1;
-////            alignment<<-0.00622326, 0.00805024, 0.99994823, -2.63234767,
-////                    -0.99216644, -0.12481601, -0.00516998, -0.08131337,
-////                    0.12476793, -0.99214725,  0.00876394, 0.27438757,
-////                    0,0,0,1;
-//
-//            TruePose = Converter::toSE3Quat(Converter::toCvMat(alignment))*TruePose;
-//            //TruePose = TruePose.inverse();
-//            g2o::SE3Quat PoseErrBefore = TruePose.inverse() * Converter::toSE3Quat(pKF->GetPose());
-//            g2o::SE3Quat PoseErrAfter = TruePose.inverse() * SE3quat;
-//            double E = TruePose.toMinimalVector().head(3).norm() + 1e-8;
-//            double Rel_error1 = PoseErrBefore.toMinimalVector().head(3).norm() / E * 100;
-//            double Rel_error2 = PoseErrAfter.toMinimalVector().head(3).norm() / E * 100;
-//            cout << "优化前误差: " << Rel_error1 << "% " << TruePose.toMinimalVector().transpose() << endl;
-//            cout << "优化后误差: " << Rel_error2 << "% " << SE3quat.toMinimalVector().transpose() << endl;
-//        }
         pKF->SetPose(Converter::toCvMat(SE3quat));
     }
 

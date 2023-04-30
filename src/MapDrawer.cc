@@ -399,7 +399,7 @@ void MapDrawer::DrawMapObjectsInCurrentFrame()
         }
         glEnd();
 
-        // test，绘制当前gt检测cuboid
+        // test
         if (1)
         {
             DetectionObject* det = pMO->GetLatestObservation();
